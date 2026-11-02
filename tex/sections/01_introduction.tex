@@ -1,0 +1,219 @@
+\section{Introduction}
+\label{sec:introduction}
+
+\subsection{Motivation}
+\label{sec:intro-motivation}
+
+\skim{AI weather models now rival physics-based NWP.} Within a few
+years, weather forecasting models trained on reanalysis data have become
+competitive with physics-based numerical weather prediction (NWP). Models
+such as GraphCast \citep{lam2023graphcast}, Pangu-Weather
+\citep{bi2023pangu} and Aurora \citep{bodnar2024aurora} match or exceed
+the skill of ECMWF's high-resolution forecast on many standard
+verification scores, and ECMWF now runs its own AI model, AIFS,
+operationally \citep{lang2024aifs}. Independent assessments
+against ECMWF's operational forecasts confirm that several of these models
+match or exceed it on many headline scores, while differences remain, for
+example in the intensity of extremes and the smoothness of the forecast
+fields \citep{rasp2024weatherbench2, benbouallegue2024rise}.
+
+\skim{AI models are cheap to run, but cost still limits research use.}
+Once trained, these models produce a 10-day forecast in seconds to
+minutes on a single GPU or TPU, orders of magnitude faster than a
+physics-based model on a supercomputer \citep{pathak2022fourcastnet,
+bi2023pangu, lam2023graphcast}. Part of that gap reflects
+the hardware rather than the method: ported to GPUs, physics-based models
+run substantially faster than on CPUs \citep{fuhrer2018near}, by factors
+of 6.4 node for node for ICON-A \citep{giorgetta2022icon} and 5.6
+socket for socket for the operational ICON of MeteoSwiss
+\citep{lapillonne2026icon}. Much of the remaining gap comes from the AI
+models' longer time steps and coarser resolution; NeuralGCM, for example,
+attributes its savings of three to five orders of magnitude to running at
+8--40 times coarser horizontal resolution than the IFS and global
+cloud-resolving models \citep{kochkov2024neural}. Cost nevertheless remains a constraint in research.
+Studies that run a model many times -- over many initial dates, as
+ensembles, or in sensitivity experiments -- multiply the cost of a
+single forecast, and are often carried out on a single workstation GPU
+rather than on a supercomputer.
+
+\skim{GPU cost grows with memory, and inference dominates the energy use of machine learning.} The
+size of a model that fits in GPU memory is often the binding constraint.
+A consumer GPU with 16\,GB, such as the NVIDIA GeForce
+RTX~5080 used in this study, launched at US\$999, and the model with
+32\,GB at twice that \citep{nvidia2025rtx50}; GPUs with more memory are
+data-centre products, and access to large amounts of compute is
+increasingly concentrated in industry rather than in academia
+\citep{besiroglu2024compute}. Reducing the cost of running a model
+also reduces its energy use, and inference -- repeated every time a
+trained model is used -- is the larger part of that energy: at Google,
+about three fifths of the energy used for machine learning in
+2019--2021 went to inference rather than training
+\citep{patterson2022carbon}, and the energy per inference varies by
+orders of magnitude between models and tasks \citep{luccioni2024power}.
+
+\skim{Running a model at lower numerical precision halves its memory and speeds it up.}
+One of the simplest ways to reduce this cost is to run the model at
+lower numerical precision. AI weather models, like most neural networks,
+are distributed with their parameters (``weights'') stored as 32-bit
+floating-point numbers (fp32), which carry about seven significant
+decimal digits, and by default they are also run in fp32. The two common
+16-bit formats, fp16 (half precision) and bfloat16 (bf16), carry about
+three and two to three significant digits; fp16 is the more precise of
+the two but represents only values up to 65{,}504, whereas bf16 keeps the
+range of fp32. Storing a model in 16 bits halves the memory of its
+weights, and recent GPUs, including consumer models, perform 16-bit
+arithmetic considerably faster than fp32 arithmetic. Converting a trained
+model to lower precision is commonly called \emph{quantisation}; the
+term covers both reduced-precision floating-point formats and integer
+formats, which need additional scaling. In this paper it refers to
+running a model whose released weights are in fp32 with its network in
+fp16 or bf16. The formats, and the different ways a model can be run in
+reduced precision, are described in \S\ref{sec:quantisation}.
+
+\skim{Reduced precision is already used in AI weather models, but its effect on skill is unreported.}
+Reduced precision is already common in AI weather models, but usually
+as an implementation choice rather than as an object of study. Aurora
+was trained with most computations in bf16, and for its air-pollution
+extension its developers keep ``all computations before and after the
+backbone'' in fp32 while the backbone runs in bf16, ``to better handle
+low-magnitude values'' \citep{bodnar2024aurora}. The released code of
+Aurora~1.5 runs most operations in a 16-bit format by default while
+keeping the weights in fp32 -- a configuration that, at full
+resolution, does not fit in the 16\,GB of GPU memory available here.
+GraphCast's official code runs the network in bf16
+\citep{lam2023graphcast, deepmind_weathernext_casting}; ECMWF's
+inference software for AIFS offers 16-bit modes, noting that ``most
+models work well with half precision'' \citep{anemoi_inference_precision};
+and FourCastNet was trained with reduced precision at scale
+\citep{kurth2023fourcastnet}. None of these sources reports how much
+forecast skill reduced precision costs.
+
+\skim{Research questions: how much skill is lost, how much is saved, and where does the rounding enter?}
+This paper asks what happens to the forecasts when an AI weather
+model released with fp32 weights is run in 16 bits. Specifically: (i)
+how much faster, smaller and more energy-efficient does the model
+become; (ii) how much forecast skill does it lose, and does the loss
+differ between models, variables, lead times, regions and scales; (iii)
+is fp16's limited numeric range a practical risk; and (iv) where in the network
+does the rounding enter the forecast, and do rules of thumb from other
+applications of reduced precision -- such as keeping the first and last
+layers or the normalisation layers in higher precision -- carry over to
+weather models?
+
+\subsection{Related work}
+\label{sec:intro-related-work}
+
+\skim{Physics-based NWP reduces precision once it is known where it is needed.}
+Physics-based weather and climate models have used reduced precision
+for longer, and a common finding is that precision can be reduced
+substantially once it is known \emph{where} in the model it is
+needed. Large parts of a spectral dynamical core can run with
+only a few significant bits \citep{dueben2014benchmark}. Single precision
+in ECMWF's Integrated Forecasting System (IFS) reduced runtime by about
+40\% without degrading forecast skill \citep{vana2017single} and has
+been operational since IFS cycle 47R2, with the savings used to raise
+the ensemble's vertical resolution from 91 to 137 levels
+\citep{lang2021more}. Reduced precision has also been shown to be usable
+in data assimilation \citep{hatfield2018improving}, to be tolerable for
+small scales but not for large ones \citep{chantry2019scale}, to allow
+hardware designed for deep learning to run parts of a weather model
+\citep{hatfield2019accelerating}, and to allow a fluid model to run
+entirely in 16 bits with suitable rounding and scaling
+\citep{klower2022fluid, paxton2022climate}.
+
+\skim{In machine learning, sensitivity to precision concentrates in a few parts of a network.}
+Machine-learning research shows that bf16 works well for training and
+that sensitivity to reduced precision concentrates in a few parts of a
+network. Training with a mix of 16-bit and 32-bit
+arithmetic is well established \citep{micikevicius2018mixed}, and bf16
+training matches the accuracy of fp32 training without changes to the
+training procedure \citep{kalamkar2019bfloat16}. Whether a trained model
+keeps its accuracy when it is afterwards run entirely in 16 bits is a
+separate question: even a model trained with bf16 arithmetic, such as
+Aurora, is released with fp32 weights, because standard
+mixed-precision training keeps an fp32 master copy of the weights and
+leaves parts of the computation, such as normalisation, in fp32
+\citep{micikevicius2018mixed}. Research on quantisation shows that sensitivity to
+reduced precision is unevenly distributed across a network. Image
+classification networks are conventionally quantised with their first
+and last layers kept at higher precision, ``as these have been reported
+to significantly impact accuracy'' \citep{choi2018pact}, and some methods
+assign a precision to each layer according to its estimated sensitivity
+\citep{dong2019hawq}. In large language models, a small fraction of
+the internal values or weights accounts for much of the quantisation
+error, and keeping that fraction at higher precision recovers most of
+the accuracy \citep{dettmers2022llmint8, xiao2022smoothquant,
+lin2023awq}. Weather models differ from these applications in one
+respect that matters here: they are run autoregressively, each forecast
+step taking the previous step's output as input, so that errors
+introduced by reduced precision can grow over a forecast.
+
+\skim{Closest work: a concurrent study of integer quantisation.} The
+closest work is a concurrent study of integer quantisation of two AI
+weather models, DLWP and FourCastNet \citep{bhattacharya2026ptq}. It
+converts the weights to 8-, 4- and 2-bit integers, with and without
+quantising the intermediate results and with methods developed for
+language models, evaluates 60-hour forecasts from four initial dates,
+and finds that the number of bits used for the weights dominates the
+loss of skill. Following common practice, it keeps the input and output
+layers at full precision rather than testing their sensitivity, and
+because the quantisation is simulated it does not measure speed or
+memory gains. The present study differs in using formats that
+current GPUs execute natively (fp16 and bf16), in measuring the speed,
+memory and energy gains alongside the change in skill, and in covering
+five models, 52 initial dates and lead times up to 10 days
+(\S\ref{sec:intro-contributions}). It also tests where in each network
+the rounding enters the forecast, including the sensitivity of the input
+and output layers.
+
+\subsection{Approach and contributions}
+\label{sec:intro-contributions}
+
+\skim{Five models, 52 dates, network in fp16 with the state in fp32.}
+We run five publicly available AI weather models -- Aurora (in a
+deterministic and an ensemble version), Pangu-Weather, FourCastNet,
+SFNO and FastNet -- on a single 16\,GB GPU\footnote{NVIDIA GeForce RTX~5080.}, from 52 initial dates in
+2024, in fp32 and with their networks in fp16, and compare the forecasts
+with each other and with ERA5. Our contributions are:
+\begin{itemize}
+\item We show that the physical state of a model must stay in fp32: the
+simplest conversion of a whole model rounds it in physical units, which
+in bf16 discards meaningful information and in fp16 overflows. Keeping
+the state, its normalisation and denormalisation in fp32 costs almost
+nothing.
+\item With the state in fp32, running the network in fp16 changes the
+global RMSE by at most 1.4\% and for four of the five models by less
+than 0.5\%, equivalent to losing less than an hour of lead time up to
+day 8 and at most two hours at day 10, while making a forecast 1.3--3.5
+times faster and 1.4--3.7 times cheaper in energy.
+\item We examine where the fp16 and fp32 forecasts differ -- by region,
+latitude band, spatial scale, in tropical and extratropical storms and in
+an ensemble -- and find no systematic degradation beyond a small
+tropical penalty in FourCastNet.
+\item We show that fp16's limited numeric range is not a practical risk for
+these models: no value overflowed, and the largest values stay 38 to 544
+times below the limit.
+\item We test where fp16 rounding enters the forecast and find that
+common rules of thumb carry over only partly: the first and last layers
+dominate for some models but not others, and no type of layer is
+sensitive on its own.
+\item We compare fp16 with bf16, the format often recommended because it
+needs no attention to range: with the state in fp32, bf16 is as fast as
+fp16 but less accurate for every model, by up to two orders of magnitude.
+Simple 8-bit quantisation of the weights, or of weights and activations,
+costs one to several orders of magnitude more skill than fp16.
+\end{itemize}
+
+\subsection{Outline}
+\label{sec:intro-outline}
+
+Section~\ref{sec:models-and-data} describes the models, their
+skill and cost in fp32, the reduced-precision formats and the
+verification data; Section~\ref{sec:methods} the experimental design and
+diagnostics. Section~\ref{sec:results} presents the results on
+quantisation: the need to keep the state in fp32, the comparison of fp16
+with fp32 and where the two differ, ensembles, fp16's numeric range, where fp16
+rounding enters the forecast, and the comparisons with bf16 and with
+8-bit formats. Section~\ref{sec:discussion}
+discusses the results and their limitations, and
+Section~\ref{sec:conclusion} concludes.

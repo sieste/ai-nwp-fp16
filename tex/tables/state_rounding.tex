@@ -1,0 +1,21 @@
+\begin{table}[tbp]
+\centering
+\small
+\caption{Rounding the physical state to 16 bits: for ERA5 initial states (13 dates in 2024), the largest magnitude, the share of values above fp16's largest value (65,504), and the RMS error of rounding each field to bf16 and fp16 in physical units (fp16: over the values that stay finite) and after normalisation with the field's global mean and standard deviation (error expressed in physical units).}
+\label{tab:state-rounding}
+\begin{tabular}{lrrrrrr}
+\toprule
+ & & & \multicolumn{2}{c}{physical units} & \multicolumn{2}{c}{normalised} \\
+Field & max & \% $>$ 65{,}504 & bf16 & fp16 & bf16 & fp16 \\
+\midrule
+2t (K) & 323 & 0 & 0.565 & 0.0708 & 0.0255 & 0.00319 \\
+t850 (K) & 314 & 0 & 0.567 & 0.0711 & 0.0202 & 0.00252 \\
+msl (Pa) & 1.05e+05 & 100 & 148 & overflow & 1.88 & 0.234 \\
+sp (Pa) & 1.05e+05 & 97 & 148 & overflow & 11.3 & 1.41 \\
+z500 (m$^2$\,s$^{-2}$) & 5.89e+04 & 0 & 73.9 & 9.24 & 4.59 & 0.573 \\
+z400 (m$^2$\,s$^{-2}$) & 7.56e+04 & 81 & 143 & overflow & 5.64 & 0.705 \\
+z300 (m$^2$\,s$^{-2}$) & 9.67e+04 & 100 & 148 & overflow & 6.92 & 0.864 \\
+z50 (m$^2$\,s$^{-2}$) & 2.08e+05 & 100 & 295 & overflow & 6.22 & 0.777 \\
+\bottomrule
+\end{tabular}
+\end{table}

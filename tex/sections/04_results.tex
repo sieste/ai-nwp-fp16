@@ -1,0 +1,528 @@
+\section{Results}
+\label{sec:results}
+
+\subsection{The physical state must stay in fp32}
+\label{sec:results-state}
+
+\skim{Converting a whole model also converts its physical state, in Aurora and Pangu-Weather.}
+Before comparing fp16 and fp32 networks, we show why the
+physical state must be kept out of the conversion: the simplest way to
+run a model in 16 bits, converting the whole model, also rounds the
+state, and this alone degrades or destroys the forecasts. Converted as a
+whole to 16 bits, Aurora and Pangu-Weather hold
+their state -- including the output of each step, which is the input of
+the next -- in 16 bits in physical units, because they convert their
+input fields before normalising them (\S\ref{sec:quantisation}).
+FourCastNet and FastNet normalise outside the network and
+are not affected; SFNO's whole-model conversion fails differently, by
+discarding the imaginary parts of its filters
+(Appendix~\ref{sec:appendix-precision}).
+
+\input{tables/state_rounding}
+
+\skim{In fp16, pressure and upper-level geopotential overflow; in bf16, the state is rounded to steps comparable to a day's forecast error.}
+Table~\ref{tab:state-rounding} shows what 16 bits do to the
+physical state. In fp16, every value of mean sea-level pressure in Pa, 97\%
+of surface pressure and all geopotential above 400\,hPa (81\% at 400\,hPa)
+exceed 65{,}504 and become infinite. bf16 represents them, but coarsely:
+rounding an ERA5 initial state to bf16 changes 2t and t850 by 0.57\,K, msl
+by 148\,Pa and z500 by 74\,m$^2$\,s$^{-2}$ (RMS), comparable to the models'
+fp32 errors at day 1 (0.70--1.03\,K for 2t, 54--78\,Pa for msl,
+41--66\,m$^2$\,s$^{-2}$ for z500; \S\ref{sec:models}), and the rounding
+recurs at every step. The same fields rounded after normalisation, whose
+values are of order one, change by 16 to 80 times less (0.026\,K for 2t,
+1.9\,Pa for msl, 4.6\,m$^2$\,s$^{-2}$ for z500 in bf16).
+
+\skim{The consequences: fp16 forecasts are lost at the first step, bf16 forecasts lose much of their skill.}
+The consequences show directly in the forecasts. Aurora
+converted as a whole to fp16 returns no finite value: every field is
+infinite or undefined from the first 6-hour step on (three dates tested).
+Converted as a whole to bf16, Aurora's forecasts remain finite but
+their RMSE rises by up to 167\%, against at most 25\% with the network in
+bf16 and the state in fp32 (Figure~\ref{fig:rmse-grid-naive} in
+Appendix~\ref{sec:appendix-bf16}).
+
+\skim{Keeping the state, normalisation and denormalisation in fp32 avoids all of this at little cost.}
+Keeping the state, its normalisation and its
+denormalisation in fp32, and rounding only the normalised fields as they
+enter the network, avoids these problems. It costs one fp32 copy of the
+state -- for Aurora, the largest, 84 fields at two times, about 0.7\,GB,
+6\% of its peak memory in fp16 -- and a few element-wise operations per
+step. All 16-bit runs in the rest of this paper are built this way
+(\S\ref{sec:quantisation}). The same consideration underlies the choice
+of Aurora's developers to keep the computations before and after the
+backbone in fp32 for its air-pollution extension
+\citep{bodnar2024aurora}, and the practice in reduced-precision NWP of
+representing variables so that the available precision is not spent on a
+large constant offset \citep{klower2022fluid}.
+
+\subsection{fp16 versus fp32}
+\label{sec:results-fp16}
+
+
+\begin{figure}[tbp]
+\centering
+\includegraphics[width=\textwidth]{fp16_vs_fp32_rmse_global}
+\caption{Change in global RMSE against ERA5 of the fp16 forecasts relative
+to fp32, $(\mathrm{fp16}-\mathrm{fp32})/\mathrm{fp32}$ of the mean over
+the 52 dates of 2024, at days 1--10, with 95\% confidence intervals from
+the paired per-date differences. Columns: models in order of size; rows:
+variables. All panels show $-2$ to $+2\%$; FourCastNet's intervals for 2t
+at days 9--10 and t850 at day 10 extend beyond this range.}
+\label{fig:fp16-rmse}
+\end{figure}
+
+\skim{fp16 changes the global RMSE by at most 1.4\%, and by less than 0.5\% for FastNet, Pangu-Weather, SFNO and Aurora.}
+Figure~\ref{fig:fp16-rmse} shows the change in global RMSE
+when the network runs in fp16. For FastNet, the changes lie between
+$-0.5$ and $+0.25\%$; for 2t and t850, the fp16 forecasts are slightly more
+accurate at every lead time. For Pangu-Weather, the RMSE increases by
+0.01--0.2\%, growing with lead time; the increase is small but
+significant at the 5\% level for 45 of the 50 combinations of variable
+and lead time. For FourCastNet, the changes lie between $-0.7$ and
+$+1.4\%$: the largest increase is for z500 at day 1, and by day 10 the
+fp16 forecasts are slightly more accurate than fp32 for every variable
+($-0.2$ to $-0.7\%$). None of FourCastNet's fp16 forecasts becomes
+unstable: at day 10, the largest ratio of fp16 to fp32 RMSE on a single
+date is 1.3 (2t). For SFNO, the changes are the smallest of all
+models, between $-0.03$ and $+0.07\%$, though still significant for 32 of
+the 50 combinations. For Aurora, the model most affected by bf16 (\S\ref{sec:results-bf16}), the changes lie between $-0.16$ and $+0.48\%$. The MAE changes in the same way, by slightly larger
+percentages (at most $+1.8\%$, for FourCastNet; Figure~\ref{fig:fp16-mae}
+in Appendix~\ref{sec:appendix-figures}). Over the three regions the changes are of similar size, within
+$\pm2\%$ (SFNO: $\pm0.2\%$), except for FourCastNet over South Asia (up to $+5\%$)
+(Table~\ref{tab:fp16-areas}). At the five locations, each represented by
+only nine grid points, the changes are larger -- up to $\pm2\%$ for
+Pangu-Weather and SFNO and up to about $\pm10\%$ for the other models --
+but significant for few more combinations than expected by chance.
+
+\begin{figure}[tbp]
+\centering
+\includegraphics[width=\textwidth]{fp16_departure_global}
+\caption{Departure of the fp16 forecasts from the fp32 forecasts (RMS
+difference, global) relative to the RMSE of the fp32 forecasts against
+ERA5, mean over the 52 dates, at days 1--10.}
+\label{fig:fp16-departure}
+\end{figure}
+
+\skim{The fp16 forecasts drift away from fp32, yet keep their skill: they behave like equally skilful ensemble members.}
+Although their skill hardly changes, the fp16 forecasts drift
+away from the fp32 forecasts, by day 10 to as much as 40\% of the forecast
+error; the two behave like two equally skilful members of an ensemble
+rather than a forecast and a degraded copy. Rounding in the network
+perturbs every step, and the perturbations grow, as any small
+perturbation of a chaotic system does (Figure~\ref{fig:fp16-departure}). For Pangu-Weather, the departure is
+1--3\% of the fp32 error at day 1 and 5--10\% at day 10; for SFNO, 1--2\%
+and 3--9\%; for Aurora, 2--4\% and 13--26\%; for FastNet,
+2--8\% and 19--32\%; for FourCastNet, 4--16\% and 21--40\%. If the departure were uncorrelated with the fp32 error, the two would add
+in quadrature, and a departure of a fraction $f$ of the error would raise
+the RMSE by about $f^2/2$; with a correlation $r$ between departure and error, by about $f^2/2 + rf$. For Pangu-Weather and SFNO this holds with $r \approx 0$ throughout (between $-0.02$ and $+0.06$ for 2t and z500 at days 1, 5 and 10): departures of 3--10\% of the error give the observed increases of at most 0.2\%. For the other models, the departure becomes negatively correlated with the error by day 10, weakly for Aurora ($-0.04$ to $-0.09$) and more strongly for FastNet and FourCastNet ($-0.10$ to $-0.33$). Because the departures are then large ($f$ = 13--40\%), even a weak negative correlation offsets the $f^2/2$ term, so that the RMSE changes by less than 1\%.
+
+\begin{figure}[tbp]
+\centering
+\includegraphics[width=\textwidth]{fp16_lead_time_global}
+\caption{The change in global RMSE of the fp16 forecasts expressed as an
+equivalent change in lead time: the time over which the fp32 RMSE grows by
+the same amount (positive: fp16 worse), with the 95\% interval of the
+paired change; 52 dates in 2024.}
+\label{fig:fp16-lead-time}
+\end{figure}
+
+\skim{Expressed in lead time, the fp16 penalty is at most two hours, and less than one hour up to day 8.}
+To judge whether the RMSE changes between fp32 and fp16 matter in
+practice, we express them as lead time. If the fp16 RMSE at lead time $t$
+exceeds the fp32 RMSE by $\Delta$, the fp16 forecast is as accurate as the
+fp32 forecast at the slightly longer lead time $t+\tau$, where the fp32
+RMSE has grown by $\Delta$; for small $\tau$,
+$\tau \approx \Delta / (\mathrm{d}\,\mathrm{RMSE}/\mathrm{d}t)$, with the
+growth rate of the fp32 RMSE estimated from differences between daily
+lead times. $\tau$ is the lead time the fp16 forecast loses (gains, if
+negative; Figure~\ref{fig:fp16-lead-time}). Up to day 8, the fp16 forecasts lose
+less than one hour of lead time for every model and variable, and often
+gain a little; at day 10 the largest losses are 1.7\,h (FastNet) and 1.5\,h (Aurora), both for 10\,m wind speed. SFNO loses at most 0.3\,h at any lead time. The intervals widen at the longest lead times, where the error
+grows more slowly and the conversion becomes less precise. For comparison,
+forecasts of the leading global centres have gained about a day of lead
+time per decade in the medium range \citep{bauer2015quiet}, or a few
+hours per year.
+
+\input{tables/benchmark}
+
+\skim{fp16 is as fast as bf16: 1.3--3.5 times faster than fp32, with 1.4--3.7 times less energy.}
+Table~\ref{tab:benchmark} shows the cost of a forecast. fp16
+networks run 2.0 (FourCastNet) to 3.5 (Aurora) times faster than fp32
+(bf16 networks at the same speed, within 2\%), except for SFNO, which gains only a factor of
+1.3; for Aurora, part of the gain comes from not having to stream its
+weights from CPU memory, which fp32 requires on a 16\,GB GPU. SFNO's
+small gain is plausibly due to its spherical harmonic transforms, which
+stay in fp32, and to our application of its complex filters with four
+real products (\S\ref{sec:models}); we have not profiled it. Peak memory
+falls by about half for Pangu-Weather and FastNet, by 29\% for
+FourCastNet, by a fifth for Aurora and by a sixth for SFNO. A 10-day
+forecast uses 2.5 (Pangu-Weather) to 3.7 (FastNet) times less energy in
+fp16 than in fp32, and SFNO 1.4 times less. The GPU draws less power in
+fp16 for the four smaller models (by 7--27\%) but slightly more for
+Aurora (by 7\%), so that the energy saving comes mostly from the shorter
+run time.
+
+\input{tables/fp16_areas}
+
+\subsection{Where fp16 and fp32 forecasts differ}
+\label{sec:results-where}
+
+
+\begin{figure}[tbp]
+\centering
+\includegraphics[width=\textwidth]{fp16_bands}
+\caption{Change in RMSE against ERA5 of the fp16 forecasts relative to fp32,
+by latitude band, at days 1, 5 and 10; 52 dates in 2024.}
+\label{fig:fp16-bands}
+\end{figure}
+
+\skim{FourCastNet's fp16 penalty is concentrated in the tropics; for the other models it is small in every latitude band.}
+Figure~\ref{fig:fp16-bands} splits the change in RMSE by
+latitude band. For FastNet, Pangu-Weather, SFNO and Aurora, it stays within $\pm1.3\%$ in every band (SFNO: within $\pm0.4\%$). FourCastNet's near-zero global change hides opposite changes
+in different bands: between 20$^\circ$S and 20$^\circ$N, its fp16 z500
+RMSE is 2.8\% higher than fp32 at day 1 and 12\% higher at day 10, and
+its 2t and t850 RMSE up to 3\% and 1\% higher, while at high latitudes
+fp16 is up to 2\% more accurate. The tropical z500 error is small in
+absolute terms (fp32 RMSE 44 and 155\,m$^2$\,s$^{-2}$ at days 1 and 10,
+against 66 and 907\,m$^2$\,s$^{-2}$ globally), so that the change there
+contributes little to the global score.
+
+\begin{figure}[tbp]
+\centering
+\includegraphics[width=\textwidth]{fp16_cells_z500_day5}
+\caption{Change in z500 RMSE against ERA5 of the fp16 forecasts relative
+to fp32 at day 5, on $10^\circ\times10^\circ$ cells; 52 dates in 2024.
+Dots: cells where the paired $t$-test across dates is significant at the
+5\% level (with 648 cells, about 5\% of them would be by chance). The
+colour scale ends at $\pm5\%$; FourCastNet's tropical cells exceed it.}
+\label{fig:fp16-cells}
+\end{figure}
+
+\skim{Mapped on 10-degree cells, the changes stay within $\pm2\%$ almost everywhere, except in FourCastNet's tropics.}
+Figure~\ref{fig:fp16-cells} maps the change in z500 RMSE at
+day 5 on the $10^\circ$ cells. For Pangu-Weather and SFNO it stays within
+$\pm1\%$ in every cell, and for FastNet and Aurora within $\pm2\%$ in 91\%
+and 97\% of the cells. FastNet's changes form a patchy pattern of either
+sign, up to $\pm4\%$; Aurora's fp16 forecasts are slightly more accurate
+than fp32, by 1--3\%, over tropical South America, Africa and the western
+Pacific. FourCastNet's fp16 penalty fills the tropics: its tropical cells
+are 11\% worse on the median and up to 18\%, the cause of its tropical
+penalty in Figure~\ref{fig:fp16-bands}. More cells than the 5\% expected
+by chance are significant (11--30\%), but for Pangu-Weather and SFNO the
+significant changes are below 1\%: they are detectable because the paired
+design is so sensitive, not because they are large.
+
+\skim{Over land and sea the changes are similar; 2t changes slightly more over the ocean, where its error is small.}
+Splitting the $10^\circ$ cells into mostly land (land fraction
+at least 50\%, 203 cells) and almost entirely sea (below 5\%, 305 cells)
+shows no systematic difference for most variables: the changes stay
+within $\pm0.5\%$ over land and sea for FastNet, Pangu-Weather, SFNO and
+Aurora, and within $\pm2\%$ for FourCastNet. The largest differences are
+for 2t, whose fp16 penalty is larger over the ocean for Pangu-Weather (up
+to $+0.5\%$, against $+0.1\%$ over land), Aurora ($+0.8\%$ against
+$+0.2\%$) and FourCastNet ($+2.0\%$ against $-0.3\%$ at day 5). There the
+fp32 2t error is about three times smaller than over land (Pangu-Weather:
+0.38 against 1.14\,K at day 1), so that a similar absolute perturbation
+is a larger relative change. The cells are coarse, and coastal cells fall
+into neither group.
+
+\begin{figure}[tbp]
+\centering
+\includegraphics[width=\textwidth]{fp16_spectra}
+\caption{Zonal power spectra of z500 (top, geopotential height) and 2t
+(bottom) at day 5, averaged over the 52 dates and over 30--60$^\circ$N
+(left) and 20$^\circ$S--20$^\circ$N (right): ERA5 (black), fp32 forecasts
+(lines) and fp16 forecasts (dots, same colour), each model up to the
+smallest scale it resolves (wavenumber 45 for FourCastNet, 179 for Aurora and Pangu-Weather, 200 for FastNet, 239 for SFNO; Appendix~\ref{sec:appendix-spectra} shows all wavenumbers).}
+\label{fig:fp16-spectra}
+\end{figure}
+
+\skim{The fp16 and fp32 spectra are nearly indistinguishable at all resolved scales; fp16 adds a little small-scale z500 variance in the tropics.}
+Figure~\ref{fig:fp16-spectra} compares the zonal power spectra
+of the fp32 and fp16 forecasts with that of ERA5. At all scales the models
+resolve, the fp16 spectra lie on the fp32 spectra for 2t, and for z500 in
+FastNet and SFNO and in the mid-latitudes for all models. At the smallest scales,
+the fp16 forecasts contain slightly more z500 variance: for Pangu-Weather
+and Aurora, in the tropics at wavenumbers above about 100 (wavelengths
+below 400\,km), where the RMS amplitude of these waves rises from 0.11 to
+0.12--0.13\,gpm, against 0.34\,gpm in ERA5 -- the fp16 forecasts remain far
+smoother than ERA5 there. For FourCastNet, fp16 adds tropical z500 variance from wavenumber about 25 (1600\,km at the equator) up to its limit of 45: the RMS amplitude of these waves rises from 0.73 to 0.81\,gpm, against 1.12\,gpm in ERA5, consistent with its higher tropical z500 error (Figure~\ref{fig:fp16-bands}); in the mid-latitudes its spectra are unchanged. Above wavenumber 45, which FourCastNet's spectral filters do not act on, its fp32 spectra lie 10--100 times above ERA5's, and fp16 adds further variance there (Appendix~\ref{sec:appendix-spectra}). The added variance is consistent
+with rounding noise in the network output, which has a flat spectrum and
+is visible only where the forecast itself has little variance. In
+absolute terms it amounts to a few tenths of a geopotential metre at most,
+and does not smooth the forecasts.
+
+\begin{figure}[tbp]
+\centering
+\includegraphics[width=\textwidth]{storm_tracks_fp16}
+\caption{Tracks of the storms Isha, Kathleen, Beryl and Milton (rows) in
+ERA5 (black) and in the fp32 (solid) and fp16 (dashed) forecasts of each
+model (columns), followed from the ERA5 position at the first tracked
+lead time. Pangu-Weather's tracks have 24-hour steps.}
+\label{fig:storm-tracks}
+\end{figure}
+
+\skim{For the four named storms, fp16 and fp32 tracks and intensities agree closely.}
+Figure~\ref{fig:storm-tracks} shows the tracks of the four
+storms. For Pangu-Weather, the fp16 and fp32 tracks are identical to
+within a kilometre; for Aurora and SFNO, the mean position errors
+differ by at most 3\,km. For FastNet and FourCastNet, the fp16 tracks depart from the
+fp32 tracks later in the forecast, in either direction: the mean position
+error changes by between $-29$ and $+34$\,km per storm, the largest change
+being FastNet's Milton forecast (163 to 197\,km), which separates from
+the fp32 track after landfall. The mean central-pressure error changes by
+at most 0.7\,hPa for every model and storm. These differences are much
+smaller than those between the models and ERA5 (mean position errors of
+60--430\,km). Four cases cannot show systematic differences; they show
+that fp16 does not visibly degrade the forecasts of these storms.
+
+\begin{figure}[tbp]
+\centering
+\includegraphics[width=\textwidth]{location_london_2024-01-20_00}
+\caption{Forecasts for London (mean over the $3\times3$ grid points
+nearest to its centre; for FastNet, over the six its interpolated fields
+cover) from 20 January 2024 00\,UTC, through Storms Isha (minimum on
+22 January, day 2) and Jocelyn (24 January, day 4), which crossed the UK
+in quick succession: mean sea-level pressure, 10\,m wind speed and 2\,m
+temperature in ERA5 (black) and in the
+fp32 (solid) and fp16 (dashed) forecasts of each model (rows).
+Pangu-Weather's forecasts have 24-hour steps.}
+\label{fig:location-series}
+\end{figure}
+
+\skim{At a single location, fp16 and fp32 forecasts are indistinguishable for about five days and then drift apart, by less than the forecast error.}
+Figure~\ref{fig:location-series} shows how the fp16 and fp32
+forecasts diverge at a single location, London, in a forecast through
+two storms in quick succession, Isha and Jocelyn, the strongest of which,
+Isha, was the most significant wind storm in the UK for almost two years
+\citep{metoffice2024storms}. Up to day 5, the two are indistinguishable at the scale of the
+forecast: they differ by at most 0.5\,hPa, 0.3\,m\,s$^{-1}$ and 0.3\,K
+(FastNet; Pangu-Weather, SFNO and Aurora by at most 0.15\,hPa,
+0.03\,m\,s$^{-1}$ and 0.05\,K), against mean fp32 errors of 0.7--2.3\,hPa,
+0.3--0.8\,m\,s$^{-1}$ and 0.4--1.0\,K over the same days. All models
+capture the deepening to about 1000\,hPa at day 2 and the wind maximum
+with it, and the second low two days later, in fp16 as in fp32: in this
+high-impact situation the fp16 forecasts are as stable as the fp32
+forecasts. From day 6, the fp16 forecasts of FastNet,
+FourCastNet and Aurora drift away from fp32, by up to 2.8\,hPa,
+1.0\,m\,s$^{-1}$ and 2.2\,K, in either direction and by amounts comparable
+to or smaller than the forecasts' errors at these lead times (mean fp32
+errors of 3.7--5.5\,hPa, 1.0--1.4\,m\,s$^{-1}$ and 1.6--1.7\,K); those of
+Pangu-Weather and SFNO stay within 0.5\,hPa, 0.13\,m\,s$^{-1}$ and 0.11\,K
+of fp32 throughout. This is one case; the location statistics over all 52
+dates are in Table~\ref{tab:fp16-areas}.
+
+\subsection{fp16 ensembles}
+\label{sec:results-ensemble}
+
+\begin{figure}[tbp]
+\centering
+\includegraphics[width=\textwidth]{fp16_ensemble}
+\caption{Aurora ensemble (13 dates in 2024, 8 members): change of the fp16
+ensemble relative to fp32 in global CRPS and spread, with 95\% intervals
+from the paired per-date differences (top), and RMS difference between
+each fp16 member and the fp32 member with the same noise, relative to the
+fp32 spread (bottom).}
+\label{fig:fp16-ensemble}
+\end{figure}
+
+\skim{In fp16, Aurora's ensemble keeps its CRPS within 1\% and its spread within 0.5\% of fp32.}
+For Aurora's ensemble checkpoint, fp16 changes the global CRPS
+by at most $+0.8\%$ (z500 at day 1) and mostly by 0.0--0.3\%, and the
+ensemble spread by less than 0.5\% (Figure~\ref{fig:fp16-ensemble}). The
+fraction of the globe where ERA5 lies outside the range of the members
+(0.21--0.36, depending on variable and lead time) is unchanged to within
+0.01, so fp16 does not change the calibration of the ensemble. The
+ensemble's CRPS is 0.56--0.75 times the MAE of Aurora's deterministic
+forecasts on the same dates (2t and z500), the usual advantage of a
+well-spread ensemble over a single forecast, and fp16 changes neither.
+
+\skim{fp16 perturbs each member by much less than the members differ from each other.}
+Each fp16 member departs from the fp32 member with the same
+noise by 3--11\% of the ensemble spread up to day 5 and by 31--43\% at day
+10 (Figure~\ref{fig:fp16-ensemble}, bottom). The rounding in fp16 thus
+acts like a small additional perturbation, much smaller than the
+perturbations the ensemble is designed to sample, and growing like them.
+
+\subsection{Range headroom of fp16}
+\label{sec:results-headroom}
+
+\begin{figure}[tbp]
+\centering
+\includegraphics[width=0.75\textwidth]{fp16_headroom}
+\caption{Largest magnitude of any fp16 value returned by any module of
+each model, per model step, over the 52 dates of 2024, against the largest
+finite fp16 value (65,504, dashed). In parentheses: the ratio of 65,504 to
+the largest value over all steps.}
+\label{fig:fp16-headroom}
+\end{figure}
+
+\skim{No fp16 value overflowed, and the largest values stay 38 to 544 times below fp16's limit.}
+fp16's limited numeric range is its main risk: a value above 65,504
+becomes infinite, and the forecast is lost. On the 52 dates, no module of
+any model returned a non-finite value. The largest magnitudes
+(Figure~\ref{fig:fp16-headroom}) are 120 (Pangu-Weather), 208 (SFNO),
+225 (FastNet), 559 (FourCastNet) and 1,733 (Aurora), 544, 315, 291, 117
+and 38 times below the limit. For four of the models they are constant
+over the 10 days;
+FourCastNet's grow from 116 to 559 after day 6, in its input layer, probably because its normalised state drifts outside the range it was trained on late in the forecast. Aurora's largest values, which set its 38-fold margin, occur in
+an MLP of the first stage of its backbone, the component that also
+dominates its fp16 departure for 2t (\S\ref{sec:results-sensitivity}).
+
+\skim{At the other end of the range, few values fall below fp16's smallest normal number.}
+Values smaller than $6.1\times10^{-5}$, fp16's smallest
+normal number, keep fewer significant bits. Over all modules, the median share of such values is 0.008--0.07\%.
+The exceptions are outputs that are naturally close to zero: attention
+weights after the softmax in Pangu-Weather (up to 24\%), activations after
+the GELU in FourCastNet and Aurora (up to 17\% and 9\%) and the output of
+some normalisation layers in FastNet (11\%). Since these values are tiny,
+their reduced precision changes the sums they enter by a negligible
+amount.
+
+\subsection{Where fp16 rounding enters the forecast}
+\label{sec:results-sensitivity}
+
+\begin{figure}[tbp]
+\centering
+\includegraphics[width=\textwidth]{fp16_oat}
+\caption{Departure of the forecast from fp32 at 24\,h (z500, global, mean
+over 13 dates) when only one component runs in fp16, relative to the
+departure with the whole network in fp16. Components in execution order.}
+\label{fig:fp16-oat}
+\end{figure}
+
+\skim{Whether the first and last layers matter most depends on the architecture.}
+A common rule in reduced-precision inference is to keep the
+first and last layers in higher precision \citep{jacob2018quantization,
+nagel2021white}. Figure~\ref{fig:fp16-oat} tests it. For Pangu-Weather, the
+ends dominate: in fp16, the patch embedding, the first stage and the patch
+recovery alone each produce 43--69\% of the full departure, the middle stages 11--22\%. Aurora behaves similarly: its encoder, first backbone stage and decoder dominate (44, 49 and 72\% of the z500 departure; for 2t, the first backbone stage alone 73\%). For FastNet, the last component
+dominates: its decoder alone produces 89\% of the departure, whereas the
+16 processor rounds contribute at most 8\% each. For FourCastNet,
+sensitivity falls steadily with depth, from 57\% for the patch embedding
+to 14\% for the output layer. For SFNO, every component contributes about
+equally: each alone produces 23--39\% of the z500 departure. SFNO is also
+the one model in which converting every component separately departs
+much less than converting the whole network (48\% for z500, 68\% for 2t;
+98--100\% for the other models). The difference lies in what stays in
+fp32 when the components are converted separately: the activations
+passed from one component to the next, which are converted back to fp32
+at each component's boundary, and the $1\times1$ convolution on SFNO's
+residual path, which carries the network's input directly to its output
+and belongs to no component; we have not separated the two. The contributions of the components do
+not add linearly but roughly in quadrature: the square root of the sum
+of their squares is close to 1 (0.9--1.5 for the five models), as for
+independent sources of noise.
+
+\skim{No type of layer needs higher precision on its own.}
+Normalisation and softmax layers are often kept in higher
+precision in mixed-precision training and inference
+\citep{micikevicius2018mixed}. Keeping all normalisation layers, all
+attention or spectral-filter layers, or all MLPs in fp32 changes the
+departure by at most 6\% for Aurora, Pangu-Weather, FourCastNet and SFNO
+(whose filters stay complex fp32 numbers), and keeping
+FastNet's normalisation layers in fp32 by 5--10\%; only keeping all of
+FastNet's linear layers in fp32 -- nearly the whole network -- reduces it
+substantially (to 29--42\%).
+
+\begin{figure}[tbp]
+\centering
+\includegraphics[width=0.75\textwidth]{fp16_depth}
+\caption{Relative difference between the fp16 and fp32 outputs of every
+module during the first model step, against the module's position in the
+order of execution (median over 13 dates, running median over 1/40 of the
+network).}
+\label{fig:fp16-depth}
+\end{figure}
+
+\skim{The rounding error does not simply build up with depth.}
+Within a single step (Figure~\ref{fig:fp16-depth}), the
+relative difference between fp16 and fp32 activations grows from about
+$3\times10^{-4}$ after the first layers to a few $10^{-3}$, but not
+monotonically: in Pangu-Weather and Aurora it falls again in the last stages, to about $10^{-3}$, while in FastNet it rises steeply in the decoder, to about
+$10^{-2}$ -- the component whose fp16 rounding dominates its departure.
+FourCastNet's grows most steadily with depth. SFNO's stays between about
+$5\times10^{-4}$ and $10^{-3}$ through the network, the smallest of the
+five models, with a brief rise to $2\times10^{-3}$ near the end.
+
+\skim{A few channels carry outsized values, but within fp16's numeric range.}
+Large language models have a few activation channels with
+values far larger than the rest, which complicate quantisation
+\citep{dettmers2022llmint8}. The weather models show a similar but much
+rarer pattern: the largest channel of a module exceeds the median channel
+by more than a factor of 100 in 1 of 274 modules in Pangu-Weather, 3 of 98 in FourCastNet, 5 of 283 in FastNet and 6 of 1157 in Aurora (up to a factor of 650), and in none of SFNO's 132 (at most a factor of 63). These
+values stay within fp16's numeric range (\S\ref{sec:results-headroom}). Nor do
+they mark the sensitive parts of the network: they lie in sensitive
+components in some cases -- the first stage of Pangu-Weather, FastNet's
+decoder, FourCastNet's first blocks -- but in insensitive ones in others,
+such as FastNet's mesh edge embedder (4\% of the departure when only it
+runs in fp16) and
+the second backbone stage of Aurora (6--14\%).
+
+\subsection{Alternative quantisations: bf16 and 8-bit formats}
+\label{sec:results-bf16}
+\label{sec:results-alternatives}
+
+We compare fp16 with two alternatives: the other 16-bit format, bf16, and
+quantisation of the network to 8 bits.
+
+
+\skim{bf16 is as fast as fp16 but costs more skill for every model; with the state in fp32, its wider range is not needed.}
+bf16 is often preferred to fp16 because it keeps fp32's range.
+With the state in fp32, that range is not needed: no fp16 value
+overflowed, with a margin of at least a factor of 38
+(\S\ref{sec:results-headroom}). bf16 runs as fast as fp16 and uses as
+much memory and energy -- its time per step, peak memory and energy
+differ from fp16's by at most 2\%, 1\% and 3.4\%
+(Table~\ref{tab:benchmark}) -- but it is less
+accurate (Table~\ref{tab:bf16}, Appendix~\ref{sec:appendix-bf16}). On
+the same 52 dates and with the same fp32 state, bf16 raises the global
+RMSE significantly more than fp16 in 12 to 20 of the 20 combinations of
+variable and lead time per model, and is significantly better in 4 of
+all 120, about as many as expected by chance. At days 1--5, the bf16
+penalty is up to 3\% for Pangu-Weather, FastNet and SFNO, 5--25\% for
+Aurora and 8--66\% for FourCastNet, whose bf16 2t error at day 10 is 1.8
+times that of fp32 on the median date. This is what the formats predict:
+bf16 has three fewer mantissa bits than fp16, so that its rounding steps
+are eight times as large, and SFNO's bf16 forecasts depart from fp32 8 to
+17 times as much as its fp16 forecasts at days 1--5. For these models,
+fp16 is the better 16-bit format.
+
+\label{sec:results-8bit}
+
+\input{tables/eightbit}
+
+\skim{Simple 8-bit quantisation costs one to several orders of magnitude more skill than fp16.}
+Halving the precision once more, to 8 bits, is not a free
+extension of fp16 (Table~\ref{tab:eightbit}). With int8 weights, the
+mildest configuration, the global RMSE of z500 and 2t increases by
+1--16\% at day 1 for Aurora, Pangu-Weather, FourCastNet and SFNO -- ten
+to a hundred times the change in fp16 -- and mostly remains higher at
+day 10 (up to 55\%, FourCastNet's 2t). fp8 weights, with only three
+mantissa bits, cost more (7--82\% at day 1). Rounding the inputs of every
+linear layer as well raises the day-1 RMSE by 8--430\%, and makes
+FourCastNet's int8 forecasts unstable by day 10 (z500 RMSE up by a factor
+of 19). By day 10, the 8-bit forecasts depart from the fp32 forecasts by
+half the fp32 error or more, in most configurations by about the whole
+error, against 3--40\% for fp16.
+
+\skim{FastNet shows why: a single input with large weights sets the int8 scale of its first layer.}
+FastNet is the exception among the weight-only results: int8
+weights more than double its z500 error, more than fp8 weights do.
+Applying int8 to one layer at a time locates almost the whole effect in
+the first layer of its encoder, which maps the 86 features of each
+grid-to-mesh edge to the network's width: one of the 86 inputs has
+weights about 25 times larger than a typical input, so that with one
+scale per output channel the int8 steps are set by it, and about a third
+of the layer's weights -- for ten of the inputs, most of them -- are
+rounded to zero. fp8, whose steps are relative to each value, keeps them.
+This is the kind of outlier that per-input scaling and the methods
+developed for language models address
+\citep{dettmers2022llmint8, xiao2022smoothquant}, and such methods, or
+quantisation-aware fine-tuning, may make 8-bit inference usable for these
+models. Our results show only that simple 8-bit quantisation is not a
+drop-in replacement for fp32 as fp16 is; together with the cost of 8-bit
+inference in our tests with Aurora (slower than fp16 and bf16, or out of
+memory; Appendix~\ref{sec:appendix-precision}), they leave fp16 as the
+practical choice for these models on current hardware.

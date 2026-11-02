@@ -1,0 +1,239 @@
+\section{Methods}
+\label{sec:methods}
+
+\subsection{Regions and locations}
+\label{sec:methods-regions}
+
+\skim{Scores are computed globally, for three regions of similar size and for five locations in different climates.}
+Every forecast is scored globally, for three regions of
+similar size (Table~\ref{tab:regions}) and for five metropolitan areas,
+each represented by the $3\times3$ grid points
+($0.75^\circ\times0.75^\circ$) nearest to its centre. The regions cover the
+mid-latitudes of two continents and a monsoon region; North America is the
+WMO's standard verification area \citep{wmo2010gdpfs}. The
+locations span oceanic, monsoon, Mediterranean, continental and
+subtropical-highland climates in both hemispheres. The Bay Area box
+includes points over the bay and the Pacific. In addition, error sums on
+$10^\circ$ cells give latitude bands and land/sea averages
+(\S\ref{sec:methods-further}).
+
+\begin{table}[tbp]
+\centering
+\small
+\caption{Regions and locations used for verification. Locations: the
+$3\times3$ grid points nearest to the given centre.}
+\label{tab:regions}
+\begin{tabular}{lll}
+\toprule
+Name & Area & Climate \\
+\midrule
+UK/Europe & 35--72$^\circ$N, 15$^\circ$W--40$^\circ$E & mid-latitude \\
+North America & 25--60$^\circ$N, 145--50$^\circ$W & mid-latitude, continental \\
+South Asia & 5--35$^\circ$N, 60--100$^\circ$E & tropical and subtropical monsoon \\
+\midrule
+London & 51.5$^\circ$N, 0.1$^\circ$W & temperate oceanic \\
+Delhi & 28.6$^\circ$N, 77.2$^\circ$E & semi-arid, monsoon \\
+Bay Area & 37.6$^\circ$N, 122.2$^\circ$W & Mediterranean, coastal \\
+Beijing & 39.9$^\circ$N, 116.4$^\circ$E & continental monsoon \\
+S\~{a}o Paulo & 23.55$^\circ$S, 46.65$^\circ$W & subtropical highland \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Paired fp32 and fp16 forecasts}
+\label{sec:methods-tier1}
+
+\skim{Each forecast is run in fp32 and in fp16 from the same initial conditions.}
+For each model and initial date, we run the same 10-day forecast from
+identical initial conditions with the network in fp32 and in fp16
+(\S\ref{sec:quantisation}), and score both against ERA5
+(\S\ref{sec:verification-data}) at daily lead times (days 1--10). Because
+the two forecasts share the initial state and the weather situation,
+their difference in RMSE isolates the effect of precision from the much
+larger variation of forecast error between dates. We also record the RMS
+difference between the fp16 and the fp32 forecast, their
+\emph{departure}, which measures how much the precision changes the
+forecast regardless of whether it becomes more or less accurate. The bf16
+forecasts used for the secondary comparison (\S\ref{sec:results-bf16})
+are built and scored in the same way.
+
+\skim{52 initial dates from 2024, one per week, the same for every model.}
+The initial dates are drawn from 2024 by stratified random sampling:
+one date from each of the 52 calendar weeks, with the initialisation
+times 00, 06, 12 and 18\,UTC used 13 times each and the days of the week
+used as evenly as possible. All models use the same 52
+initialisations, so that differences between them cannot arise from
+differences in the weather situations they were tested on. Initialisations about a week
+apart give forecasts whose errors are close to independent between
+dates. The sensitivity experiments and the ensemble
+(\S\ref{sec:methods-tier2}, \S\ref{sec:methods-further}) use every fourth
+of these dates (13).
+
+\skim{Each change in RMSE is tested with a paired t-test across dates.}
+For each model, variable, lead time and area, we report the change in
+mean RMSE from fp32 to fp16 relative to the fp32 RMSE, with a 95\%
+confidence interval and a two-sided paired $t$-test of the per-date RMSE
+differences at the 5\% level. With 50 combinations of variable and lead
+time per model and area, we do not correct for multiple testing, and
+treat isolated significant results, especially at the locations, with
+caution. To judge whether a change matters in practice, we also express
+it as the lead time over which the fp32 RMSE grows by the same amount
+(\S\ref{sec:results-fp16}).
+
+\skim{The design detects changes of a few hundredths to a few tenths of a percent globally.}
+To show what this design can detect, we compute for each combination
+the smallest change in mean RMSE that the paired $t$-test detects with
+80\% probability, given $N=52$ dates and the observed standard deviation
+$s$ of the per-date differences: $(t_{0.975,N-1}+t_{0.8,N-1})\,s/\sqrt{N}$
+(Table~\ref{tab:power}). This is based on the observed variability, not
+on the observed effect, so it describes the sensitivity of the design
+rather than the probability that the reported effects are real.
+Globally, the median detectable change is 0.03--0.33\% of the fp32 RMSE,
+depending on the model; over the three regions, where scores vary more
+from date to date, 0.08--1.1\%. Because the fp16 and fp32 forecasts are
+so closely paired, the design resolves changes far smaller than any that
+would matter in practice: a significant result here shows that fp16
+changes the forecast, not that the change is important.
+
+\input{tables/power}
+
+\subsection{Sensitivity experiments}
+\label{sec:methods-tier2}
+
+\skim{One component at a time in fp16, the rest of the network in fp32.}
+To find where in the network fp16 rounding enters the forecast, we
+use a one-at-a-time (OAT) design on the components listed in
+Table~\ref{tab:components}: one component at a time runs in fp16 and the
+rest of the network in fp32, which measures the departure that the
+component causes on its own. The inputs of the component are rounded to
+fp16 when they enter it, and its outputs converted back to fp32 when they
+leave it. This corresponds to the variant of activation patching used to
+locate computations in language models in which a component is perturbed
+in an otherwise clean model \citep{meng2022locating,
+heimersheim2024activation}. One-at-a-time designs cannot detect
+interactions between components \citep{saltelli2010perfunctory}; we
+check for them by comparing the components' effects with that of the
+whole network (\S\ref{sec:results-sensitivity}), and we also run the
+network with every component converted in this way.
+
+\skim{Effects are measured as the departure from the fp32 forecast, relative to that of the whole fp16 network.}
+Each forecast is compared with the fp32 forecast from the same
+initial conditions rather than with ERA5: the departure, the
+area-weighted RMS difference between the two, is computed globally for
+each variable at every model step up to 24\,h and averaged over the 13
+dates. A comparison with ERA5 would add the much larger forecast error
+that both forecasts share. We express the departure $D_c$ with component
+$c$ in fp16 relative to the departure $D_\mathrm{fp16}$ of the whole
+network in fp16, as the share $D_c/D_\mathrm{fp16}$ of the departure that
+the component causes on its own.
+
+\skim{Three further experiments test whether sensitivity concentrates by layer type, in outlier channels or with depth.}
+The one-at-a-time design asks where in the network the rounding
+matters. Practice in other applications of reduced precision suggests
+three other ways in which sensitivity could concentrate: in certain types
+of operation, such as normalisation and softmax, which mixed-precision
+training keeps in fp32 \citep{micikevicius2018mixed}; in a few channels
+with outsized values, which dominate the quantisation error of large
+language models \citep{dettmers2022llmint8}; and towards the end of the
+network, if rounding errors accumulate with depth. Whether these carry
+over to weather models determines whether rules from those fields can
+guide reduced-precision inference here, so we test each on the same 13
+dates. (i) All layers of one type -- normalisation, attention or spectral
+filters, MLPs (FastNet: normalisation and linear layers) -- are kept in
+fp32 with their original weights inside the fp16 network, with fp16
+activations passed between them. (ii) The largest magnitude of every
+output channel of every module is recorded in the fp16 forecasts. (iii)
+The relative difference between the fp16 and fp32 outputs of every module
+is computed during the first model step, from a fixed sample of $2^{14}$
+values of each output.
+FastNet runs in PyTorch's
+deterministic mode in all these experiments, so that its departures
+contain no run-to-run variation.
+
+\subsection{Further diagnostics}
+\label{sec:methods-further}
+
+\skim{Latitude bands, maps and land/sea averages from statistics on 10-degree cells.}
+Latitude bands, maps and land/sea averages (\S\ref{sec:results-where})
+are computed from cos-latitude-weighted sums of the squared error, the
+error and the squared departure from the fp32 forecast, accumulated on
+$10^\circ\times10^\circ$ cells for every forecast, variable and lead
+time; RMSE, bias and departure can then be recomputed exactly for any
+union of cells.
+
+\skim{Spectra: zonal power spectra per 10-degree latitude band.}
+To see whether fp16 smooths or roughens the forecast fields, we
+compute, in the same runs, the zonal power spectrum of each forecast
+field and of ERA5 -- the squared magnitude of its Fourier transform along
+each latitude circle -- averaged with cos-latitude weights over each
+$10^\circ$ latitude band. We compare the spectra of each model up to the
+smallest scale it resolves (Appendix~\ref{sec:appendix-spectra}).
+
+\skim{Ensemble: Aurora's ensemble checkpoint, 8 members on 13 dates, the same noise in fp32 and fp16.}
+Aurora's ensemble checkpoint is run on every fourth of the 52
+dates (13) with 8 members, whose noise is set by seeds 0--7 in both fp32
+and fp16, so that member $m$ of the fp16 ensemble is the same stochastic
+draw as member $m$ of the fp32 ensemble. Each ensemble is scored, for
+2t, msl, z500 and t850, by the
+fair CRPS \citep{ferro2014fair}, the RMSE of the ensemble mean, the spread
+(square root of the area-mean ensemble variance) and the fraction of the
+area where ERA5 lies outside the range of the members; the precision effect
+is the RMS difference between same-seed fp16 and fp32 members.
+
+\skim{Range headroom: the largest fp16 values, overflow and small values, recorded in every module.}
+To test whether fp16's numeric range suffices, the fp16 forecasts of
+all 52 dates are repeated with forward hooks on every module of each
+network (not only the innermost layers, so that sums formed inside a
+block are seen at its output). For every fp16 tensor a module returns,
+they record the largest finite magnitude, the number of infinite or
+undefined values, and the number of nonzero values below
+$6.1\times10^{-5}$, both per module and per model step. Values computed
+and used within a module without being returned, such as attention
+scores, are not seen directly, but an overflow there would make the
+module's output infinite or undefined.
+
+\skim{Storm tracks: four named storms of 2024 tracked by their pressure minimum.}
+For a qualitative view of high-impact weather, we track four named
+storms of 2024 whose initialisation is one of the 52 dates: the
+extratropical storms Isha (initialised 20 January 00\,UTC) and Kathleen
+(5 April 18\,UTC), and the hurricanes Beryl (1 July 00\,UTC) and Milton
+(7 October 00\,UTC). Each storm is followed in ERA5 and in each forecast
+by the minimum of mean sea-level pressure within 700\,km (extratropical)
+or 400\,km (tropical) of its previous position per 6 hours, starting from
+its ERA5 position (for Isha, from 21 January 12\,UTC, when it has become a
+separate low). We compare track position, central pressure and the
+maximum 10\,m wind within 300\,km of the centre with ERA5, for fp32 and
+fp16. ERA5 underestimates the
+intensity of tropical cyclones, so intensities are compared with ERA5,
+not with observed intensities.
+
+\skim{Cost: time per step, peak memory and energy, measured on one GPU.}
+The cost of each model and precision is measured on the GPU used
+throughout, an NVIDIA GeForce RTX~5080 with 16\,GB of memory, with
+nothing else running on it. Each model is stepped forward from one
+initial date, restarting the 10-day forecast as often as needed, until at
+least 60\,s and at least 8 steps have been timed; the first step of each
+forecast, which also loads the inputs, is not timed. We report the mean
+time per step, the time for a 10-day forecast, the peak GPU memory
+allocated by PyTorch, and the energy of a 10-day forecast: the mean board
+power of the GPU, sampled every 50\,ms within the timed steps, times
+their duration.
+
+\skim{8-bit weights: weight-only int8 and fp8, with the network computing in 16 bits.}
+To test whether 8-bit formats are a further option, we simulate
+8-bit quantisation inside the fp16 network, with the state in fp32, on
+the 13 sensitivity dates over 10 days. In the weight-only configurations,
+every weight of a matrix product -- the linear and convolution layers and
+FourCastNet's and SFNO's spectral filters (for SFNO, the real and
+imaginary parts) -- is rounded to int8 (symmetric, 127 levels) or to fp8
+(e4m3) with one scale per output channel, and the network then computes
+in fp16. In the configurations with 8-bit inputs, the inputs of every
+linear and convolution layer are also rounded, to int8 with one scale per
+token or to fp8 with one scale per tensor. Biases, normalisation layers,
+embeddings and Pangu-Weather's position-dependent attention bias, which
+holds 91\% of its parameters, stay in fp16, as is usual. This is the
+simplest form of 8-bit quantisation, round-to-nearest without
+calibration or the treatment of outliers developed for language models
+\citep{dettmers2022llmint8, xiao2022smoothquant, lin2023awq}; it
+reproduces the accuracy of 8-bit inference but not its speed or memory,
+which we do not measure.

@@ -1,0 +1,49 @@
+\begin{table}[htbp]
+\centering
+\small
+\caption{Components per model, in forward-pass order, with parameter counts and share of the model total. Repeated identical blocks are grouped. ``Other'': parameters outside every component, which stay fp32 in the one-at-a-time experiments (\S\ref{sec:methods-tier2}) (FourCastNet: its learned positional embedding; Aurora: backbone time/noise MLPs and context-downsampling layers; SFNO: the $1\times1$ convolution on its residual path). SFNO's complex filter weights are counted once each.}
+\label{tab:components}
+\begin{tabular}{llrr}
+\toprule
+Model & Component & Parameters & Share \\
+\midrule
+Aurora & \texttt{encoder} & 7{,}665{,}152 & 0.608\% \\
+ & \texttt{backbone\_stage\_0} & 27{,}307{,}008 & 2.17\% \\
+ & \texttt{backbone\_stage\_1} & 155{,}330{,}560 & 12.3\% \\
+ & \texttt{backbone\_stage\_2} & 436{,}420{,}608 & 34.6\% \\
+ & \texttt{backbone\_stage\_3} & 445{,}859{,}840 & 35.4\% \\
+ & \texttt{backbone\_stage\_4} & 149{,}294{,}080 & 11.8\% \\
+ & \texttt{backbone\_stage\_5} & 25{,}205{,}760 & 2\% \\
+ & \texttt{decoder} & 9{,}953{,}776 & 0.79\% \\
+ & other & 3{,}147{,}776 & 0.25\% \\
+ & \textit{total} & 1{,}260{,}184{,}560 & \\
+\addlinespace
+Pangu-Weather & \texttt{patch\_embedding} & 58{,}752 & 0.0212\% \\
+ & \texttt{stage\_0} & 31{,}744{,}896 & 11.5\% \\
+ & \texttt{downsample} & 296{,}448 & 0.107\% \\
+ & \texttt{stage\_1..2 (2$\times$)} & 106{,}198{,}272 & 38.4\% each \\
+ & \texttt{upsample} & 332{,}160 & 0.12\% \\
+ & \texttt{stage\_3} & 31{,}744{,}896 & 11.5\% \\
+ & \texttt{patch\_recovery} & 86{,}240 & 0.0312\% \\
+ & \textit{total} & 276{,}659{,}936 & \\
+\addlinespace
+FourCastNet & \texttt{patch\_embed} & 1{,}278{,}720 & 1.7\% \\
+ & \texttt{block\_0..11 (12$\times$)} & 5{,}023{,}488 & 6.67\% each \\
+ & \texttt{head} & 1{,}277{,}952 & 1.7\% \\
+ & other & 12{,}441{,}600 & 16.5\% \\
+ & \textit{total} & 75{,}280{,}128 & \\
+\addlinespace
+SFNO & \texttt{encoder} & 177{,}408 & 0.0613\% \\
+ & \texttt{block\_0..7 (8$\times$)} & 36{,}129{,}408 & 12.5\% each \\
+ & \texttt{decoder} & 175{,}872 & 0.0608\% \\
+ & other & 5{,}621 & 0.0019\% \\
+ & \textit{total} & 289{,}394{,}165 & \\
+\addlinespace
+FastNet & \texttt{mesh\_edge\_embedder} & 594{,}432 & 0.955\% \\
+ & \texttt{encoder} & 1{,}843{,}200 & 2.96\% \\
+ & \texttt{processor\_0..15 (16$\times$)} & 3{,}545{,}088 & 5.7\% each \\
+ & \texttt{decoder} & 3{,}077{,}448 & 4.94\% \\
+ & \textit{total} & 62{,}236{,}488 & \\
+\bottomrule
+\end{tabular}
+\end{table}

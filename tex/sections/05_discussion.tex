@@ -1,0 +1,115 @@
+\section{Discussion}
+\label{sec:discussion}
+
+\skim{Recommendation: keep the state in fp32 and run the network in fp16, after checking the range.}
+For research use of AI weather models on a single GPU, our results
+support running the network in fp16 with the physical state,
+normalisation and denormalisation in fp32. The change in skill is
+statistically detectable with 52 paired dates but small in practical
+terms -- less than an hour of lead time up to day 8 -- whereas the
+savings in time and energy are a factor of two to four for four of
+the five models, and about 1.4 for SFNO. Two conditions
+come with this recommendation. First, the conversion must leave the
+state in fp32: the one-line conversion of a whole model does not, and
+for some models it fails silently, as for SFNO, whose complex weights
+lose their imaginary parts (Appendix~\ref{sec:appendix-precision}). Second, fp16's numeric range
+must be checked for each model, as we did with hooks on every module
+(\S\ref{sec:results-headroom}); the margins we found differ by more than
+a factor of ten between models, and a model trained or fine-tuned
+differently may have larger activations.
+
+\skim{fp16 sensitivity follows neither model size nor skill; the most sensitive model is distinguished by neither.}
+Across the five models, which span 62 million to 1.26
+billion parameters (Table~\ref{tab:models}), the sensitivity to fp16
+follows neither model size nor fp32 skill. The two smallest models,
+FastNet and FourCastNet, depart furthest from their fp32 forecasts
+(Figure~\ref{fig:fp16-departure}), but Pangu-Weather and SFNO, of
+intermediate size, depart least, and Aurora, the largest, lies in
+between. SFNO has the largest z500 error of the five models yet is the
+least affected by fp16, while Pangu-Weather and Aurora, the most skilful,
+are affected little and moderately. The one model clearly more affected by fp16, FourCastNet, does not stand
+out by size or skill: it has the largest changes in RMSE (up to 1.4\%,
+against about 0.5\% at most for the others), the largest departure from
+its fp32 forecasts relative to its error at day 1 (8\%, against
+1--5\%) and a tropical z500 penalty of up to 12\%
+(\S\ref{sec:results-fp16}, \S\ref{sec:results-where}). A plausible cause is its
+architecture, in particular its adaptive Fourier filters on the flat
+latitude--longitude grid, but we have not isolated it; SFNO, which also
+works in spectral space but on the sphere, is the least sensitive of the
+five. With five models, this is an observation rather than a
+test: the models also differ in step length (Pangu-Weather rounds 10
+times in a 10-day forecast, the others 40 times), in which operations
+always stay in fp32 (SFNO's spherical harmonic transforms), in
+resolution, and in how fast they amplify small perturbations, all of
+which affect how far the fp16 forecasts drift.
+
+\skim{Compute is increasingly concentrated and memory-rich GPUs increasingly expensive, so efficient inference on modest local hardware matters.}
+The computing power used for machine learning is increasingly
+concentrated in industry, and academic groups have become less
+represented in compute-intensive research
+\citep{ahmed2020dedemocratization, besiroglu2024compute}. Hardware with
+more memory has also become harder to afford: between November 2025 and
+October 2026, German retail prices of NVIDIA's RTX~50 consumer GPUs rose
+by 66\% on average, by 132\% for the 32\,GB RTX~5090 and by more than
+70\% for a 16\,GB model, while 8\,GB models were reported to remain
+available near their launch prices \citep{techtimes2026gpu}, as graphics
+memory is increasingly taken up by AI hardware
+\citep{trendforce2026memory}. This study also shows what direct access to
+a modest local GPU offers over rented or remote hardware. Short tests
+between experiments, such as those that located a memory leak in SFNO's
+software or FastNet's sensitive layer in int8, took minutes and could
+follow one another without waiting in a job queue; exclusive use of the GPU made timings reproducible
+and allowed the board power to be sampled every 50\,ms, which shared or
+virtualised GPUs often do not permit; the input data and the software
+environments of five models stayed in place between experiments; and
+the GPU cost nothing while it was idle. Together, these considerations
+make it worthwhile to make AI weather models, efficient as they already
+are, more efficient still: in fp16, every model studied here runs on a
+single 16\,GB consumer GPU, Aurora without streaming its weights from CPU
+memory, 1.3 to 3.5 times faster than in fp32 and at a fraction of the
+energy, with practically no loss of skill.
+
+\skim{Limitations: five models, one year, one GPU, verification against ERA5.}
+The results are subject to several limitations. They cover five
+models, chosen because they can be run in PyTorch on a 16\,GB GPU; larger
+models, and models such as GraphCast that run in other frameworks, may
+behave differently. All forecasts start in 2024, a single year, and are
+verified against ERA5 rather than observations, for a few variables at
+daily lead times up to 10 days. The storms are four cases and the
+ensemble one model on 13 dates; they show that fp16 does not visibly
+degrade these forecasts, not that it never does. The costs were measured
+on one consumer GPU with one version of PyTorch, and both the speed-up
+and the size of the rounding errors depend on the hardware and on the
+kernels the library selects. Finally, the sensitivity experiments
+measure departures from the fp32 forecast over the first day, on 13
+dates; they rank the parts of each network but do not show how errors
+introduced there affect skill at longer lead times.
+
+\skim{Where only bf16 is fast, keeping the most sensitive components in fp32 may recover part of its penalty.}
+The recommendation assumes hardware with fast fp16 arithmetic,
+which NVIDIA GPUs have had since 2017. Google's TPUs, on which several AI
+weather models are developed, multiply matrices in bf16
+\citep{wang2019bfloat16}; there bf16 is the natural 16-bit format, and
+our results suggest it costs more skill (\S\ref{sec:results-bf16}). The
+sensitivity experiments indicate where to look for a remedy: for
+Pangu-Weather, Aurora and FastNet, the first or last components cause
+most of the departure (\S\ref{sec:results-sensitivity}), so keeping these
+in fp32 should remove much of it; for FourCastNet, whose sensitivity is
+spread over the whole network, it may not.
+
+\skim{Block-scaled 8- and 4-bit formats are the next step; our 8-bit results show what they must handle.}
+Simple 8-bit quantisation, with one scale per output channel,
+costs far more skill than fp16 (\S\ref{sec:results-8bit}). Newer formats
+share a scale among small blocks of values \citep{rouhani2023microscaling},
+and current GPUs, including the consumer GPU used here, compute in
+floating-point formats down to 4 bits \citep{nvidia2025rtx50}. Block
+scaling addresses the failure we found in FastNet, where a single input
+with large weights set the int8 steps for every row of a layer
+(\S\ref{sec:results-8bit}), because each value then shares its scale only
+with a few neighbours. Whether such formats, perhaps with quantisation-aware
+fine-tuning, make 8- or 4-bit inference of weather models as accurate as
+fp16 is open, as is whether they would be faster for models such as
+Aurora, whose memory and time are dominated by intermediate results
+rather than weights (Appendix~\ref{sec:appendix-precision}). The paired
+design and module hooks used here would answer the first question
+directly.

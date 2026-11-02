@@ -1,0 +1,17 @@
+\begin{table}[htbp]
+\centering
+\small
+\caption{Smallest change in mean RMSE, as \% of the fp32 RMSE, that the paired $t$-test detects with probability 0.8 at the 5\% level, given the $N$ dates and the observed date-to-date variability of the fp16$-$fp32 differences. Median over the 50 combinations of variable and lead time per area (global: with range).}
+\label{tab:power}
+\begin{tabular}{lrrrrr}
+\toprule
+Model & $N$ & Global & UK/Europe & N.\ America & S.\ Asia \\
+\midrule
+FastNet & 52 & 0.33 [0.01, 0.7] & 1.11 & 1.00 & 0.52 \\
+Pangu-Weather & 52 & 0.05 [0.01, 0.2] & 0.16 & 0.13 & 0.14 \\
+FourCastNet & 52 & 0.23 [0.02, 6.5] & 0.95 & 0.66 & 1.13 \\
+SFNO & 52 & 0.03 [0.00, 0.1] & 0.11 & 0.08 & 0.09 \\
+Aurora & 52 & 0.12 [0.01, 0.5] & 0.36 & 0.30 & 0.54 \\
+\bottomrule
+\end{tabular}
+\end{table}

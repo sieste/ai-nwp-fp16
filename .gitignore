@@ -1,0 +1,13 @@
+.venv*/
+__pycache__/
+.pytest_cache/
+/checkpoints
+data/inputs/
+data/results/
+/third_party
+tex/*.aux
+tex/*.bbl
+tex/*.blg
+tex/*.log
+tex/*.out
+tex/main.pdf

@@ -1,0 +1,27 @@
+\begin{table}[tbp]
+\centering
+\small
+\caption{Inference cost on one NVIDIA GeForce RTX 5080: mean time per model step (first step of each forecast untimed, at least 60\,s of timed steps; FourCastNet, FastNet, SFNO and Aurora step 6\,h, Pangu-Weather 24\,h), speed-up over fp32, time for a 10-day forecast, peak allocated GPU memory, and energy for a 10-day forecast (mean GPU power within the timed steps, sampled every 50\,ms, times their duration). fp16: network in fp16, state in fp32. With the network in bf16 instead, time per step, peak memory and energy differ from fp16 by at most 2\%, 1\% and 3.4\%.}
+\label{tab:benchmark}
+\begin{tabular}{llrrrrr}
+\toprule
+Model & Precision & s/step & speed-up & s/10\,d & GB & Wh/10\,d \\
+\midrule
+FastNet & fp32 & 0.294 & 1.0 & 12 & 2.2 & 1.07 \\
+ & fp16 & 0.105 & 2.8 & 4 & 1.2 & 0.29 \\
+\midrule
+Pangu-Weather & fp32 & 0.785 & 1.0 & 8 & 9.5 & 0.69 \\
+ & fp16 & 0.371 & 2.1 & 4 & 5.2 & 0.28 \\
+\midrule
+FourCastNet & fp32 & 0.115 & 1.0 & 5 & 1.2 & 0.38 \\
+ & fp16 & 0.057 & 2.0 & 2 & 0.9 & 0.14 \\
+\midrule
+SFNO & fp32 & 0.531 & 1.0 & 21 & 15.4 & 1.53 \\
+ & fp16 & 0.400 & 1.3 & 16 & 12.9 & 1.07 \\
+\midrule
+Aurora$^\dagger$ & fp32 & 5.378 & 1.0 & 215 & 14.3 & 18.27 \\
+ & fp16 & 1.517 & 3.5 & 61 & 11.6 & 5.50 \\
+\bottomrule
+\end{tabular}\\[2pt]
+{\scriptsize $^\dagger$~In fp32, Aurora fits in 16\,GB only with its backbone weights streamed from CPU memory one block at a time. This slows its fp32 runs and keeps their peak memory down, so that its speed-up is partly due to the streaming, its memory saving is understated, and its energy comparison may be affected.}
+\end{table}

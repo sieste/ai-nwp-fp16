@@ -1,0 +1,22 @@
+\section{Conclusion}
+\label{sec:conclusion}
+
+Running the network of an AI weather model in fp16, with its
+physical state, normalisation and denormalisation kept in fp32, changes
+its forecasts by much less than they differ from the truth: for five
+models from three architecture families, the global RMSE changes by at
+most 1.4\%, equivalent to at most two hours of lead time at day 10, and
+the fp16 forecasts are neither smoother nor less calibrated, nor worse
+for the storms examined. At the same time, a forecast is 1.3 to 3.5
+times faster and uses 1.4 to 3.7 times less energy.
+fp16's limited numeric range, its main risk, left a margin of at least a factor
+of 38 in every model; this margin is model-specific and easy to check
+with the hooks used here, and should be checked for any model before
+fp16 is used. Where in the network the rounding matters most depends on
+the architecture rather than on general rules, but since the effect of
+the whole fp16 network is already small, no part of the network needs
+to be protected. We therefore recommend fp16 inference, with the state
+in fp32, as the default for research use of AI weather models on a
+single GPU. bf16, although it needs no attention to range, offers no
+advantage in speed and loses more skill, and simple 8-bit quantisation
+is not a substitute.

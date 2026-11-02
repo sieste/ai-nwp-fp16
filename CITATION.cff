@@ -1,0 +1,10 @@
+cff-version: 1.2.0
+message: "If you use this code, please cite it as below."
+title: "Half-precision inference of AI weather prediction models: code"
+authors:
+  - family-names: Siegert
+    given-names: Stefan
+    affiliation: University of Exeter
+repository-code: "https://github.com/sieste/ai-nwp-fp16"
+license: MIT
+version: "1.0.0"

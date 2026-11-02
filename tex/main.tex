@@ -1,0 +1,131 @@
+\documentclass[11pt]{article}
+
+% ---------------------------------------------------------------------------
+% DRAFT STATUS: funnel-method skeleton. Section/subsection structure and
+% paragraph TOPIC SENTENCES only -- not full prose yet. TODO notes (in red)
+% mark open decisions, missing figures, and citations to verify before this
+% goes further. Review this structure before we expand any section.
+% ---------------------------------------------------------------------------
+
+\usepackage[margin=1in]{geometry}
+\usepackage{graphicx}
+\usepackage{amsmath}
+\usepackage{booktabs}
+\usepackage{caption}
+\usepackage[round,authoryear]{natbib}
+\usepackage{xcolor}
+\usepackage{hyperref}
+
+\parskip=5mm
+\parindent=0mm
+
+\graphicspath{{../figures/}}
+
+% float placement: allow larger floats at the top of a page and fuller float pages
+\renewcommand{\topfraction}{0.85}
+\renewcommand{\textfraction}{0.1}
+\renewcommand{\floatpagefraction}{0.75}
+
+\newcommand{\todo}[1]{\textcolor{red}{\textbf{[TODO: #1]}}}
+\newcommand{\topicsentence}[1]{#1}
+\definecolor{reviewgreen}{RGB}{0,200,0}
+\newcommand{\reviewnote}{\textcolor{reviewgreen}{\textbf{[addressing the above TODO]}}\ }
+\newcommand{\updatenote}{\textcolor{reviewgreen}{\textbf{[updated to the 2024, $N{=}52$ results]}}\ }
+\newcommand{\additionnote}{\textcolor{reviewgreen}{\textbf{[new addition]}}\ }
+% Bold one-line paragraph summaries for skimming the structure; \skimfalse hides them all.
+\newif\ifskim \skimtrue
+\newcommand{\skim}[1]{\ifskim\textbf{#1}\ \fi}
+
+\title{Half-precision inference of AI weather prediction models: negligible loss of skill at a fraction of the cost}
+
+\author{Stefan Siegert\footnote{University of Exeter, \texttt{s.siegert@exeter.ac.uk}}}
+\date{\today}
+
+\begin{document}
+
+\maketitle
+
+
+\begin{abstract}
+AI weather prediction models are released with 32-bit (fp32)
+weights and run in fp32 by default, although current GPUs compute much
+faster in 16-bit formats. We run five publicly available models --
+Aurora, Pangu-Weather, FourCastNet, SFNO and FastNet -- on a single
+16\,GB GPU from 52 initial dates in 2024, in fp32 and with their networks
+in half precision (fp16), and verify the forecasts against ERA5. The
+physical state must stay in fp32: converting the whole model rounds it
+in physical units, which in fp16 overflows and in bf16 discards
+meaningful information. With the state, its normalisation and
+denormalisation in fp32, running the network in fp16 changes the global
+RMSE by at most 1.4\%, and by less than 0.5\% for four of the five
+models, equivalent to less than one hour of lead time up to day 8 and at
+most two hours at day 10. The differences show no systematic pattern by
+region, scale or for tropical and extratropical storms, apart from a
+small tropical penalty in FourCastNet, and fp16 leaves the CRPS, spread
+and calibration of Aurora's ensemble almost unchanged. No value
+overflowed fp16's numeric range ($\pm65{,}504$); the largest stay 38 to 544 times below it. A
+10-day forecast in fp16 is 1.3--3.5 times faster than in fp32 and uses
+1.4--3.7 times less energy. Sensitivity experiments show that rules of
+thumb from other applications of reduced precision carry over only
+partly: the first and last layers dominate for some models but not for
+others, and no type of layer is sensitive on its own. For running AI
+weather models on a single GPU, fp16 with the state in fp32 is
+practically lossless at a fraction of the cost. bf16, often preferred for
+its wider range, is as fast but less accurate than fp16 for every model,
+and simple 8-bit quantisation costs far more skill.
+\end{abstract}
+
+\input{sections/01_introduction}
+\input{sections/02_models_and_data}
+\input{sections/03_methods}
+\input{sections/04_results}
+\input{sections/05_discussion}
+\input{sections/06_conclusion}
+
+\section*{Data and Code Availability}
+\skim{Code and data availability.}
+All code is available at \url{https://github.com/sieste/ai-nwp-fp16}
+(archived at \todo{code DOI}). Its Python package \texttt{nwpprec} runs
+every forecast, experiment, figure and table in this paper; the
+repository also holds the exact software environments, a check that the
+stored results are reproduced, and the source of this paper. The scores
+and other results behind the figures and tables are archived at
+\todo{data DOI}. ERA5 is available from the Copernicus Climate Data
+Store, and the model checkpoints from their releases, listed below.
+
+\skim{Licences of the checkpoints, the code they need and the data.}
+The checkpoints are used under the terms stated by their
+releases (accessed October 2026; a summary, not a legal reading).
+Aurora~1.5 (deterministic and ensemble): MIT licence, for the weights on
+Hugging Face (\texttt{microsoft/aurora}) and the \texttt{microsoft-aurora}
+code. Pangu-Weather: the official weights are released under CC~BY-NC-SA~4.0,
+and their commercial use is forbidden; the PyTorch reimplementation's
+re-hosted weights (\texttt{zhaoshan/pangu\_pytorch}) are tagged
+Apache-2.0 but are derived from the official ones, so we treat them as
+non-commercial too, and the reimplementation's code carries no licence and
+is not redistributed in our repository. FourCastNet: weights
+(\texttt{nvidia/fourcastnet1} on Hugging Face) under Apache-2.0, loaded
+with NVIDIA's Apache-2.0-licensed \texttt{earth2studio}. SFNO: checkpoint
+(\texttt{sfno\_73ch\_small} on NVIDIA NGC) under Apache-2.0, run with
+\texttt{earth2studio}, \texttt{makani} (Apache-2.0) and
+\texttt{torch-harmonics} (BSD-3-Clause). FastNet: weights British Crown
+copyright 2025, the Met Office, under the Open Government Licence~v3.0
+(the Hugging Face card's metadata tag says CC~BY~4.0); its inference code,
+which our FastNet adapter imports, is under the GNU Affero General Public
+License~v3.0, so that adapter (\texttt{nwpprec/models/fastnet/}) is
+licensed under it too; the rest of our code is under the MIT licence. AIFS, mentioned in \S\ref{sec:models}: weights
+under CC~BY~4.0. All of these permit research use and the publication of
+results derived from the models; the Pangu-Weather weights restrict use to
+non-commercial purposes. ERA5 is distributed by the Copernicus Climate
+Change Service under CC~BY~4.0 \citep{hersbach2020era5}.
+
+\section*{Acknowledgments}
+\todo{}
+
+\bibliographystyle{plainnat}
+\bibliography{references}
+
+\appendix
+\input{sections/07_appendix}
+
+\end{document}

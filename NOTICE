@@ -1,0 +1,35 @@
+Licences in this repository
+
+Code: Copyright (c) 2026 University of Exeter. Paper (tex/, figures/):
+Copyright (c) 2026 Stefan Siegert.
+
+Everything in this repository is licensed under the MIT licence (LICENSE),
+except:
+
+  nwpprec/models/fastnet/   GNU Affero General Public License v3.0
+                            (nwpprec/models/fastnet/LICENSE). This adapter
+                            imports the Met Office's fastnet-inference package
+                            (https://github.com/MetOffice/fastnet-inference,
+                            Crown copyright, AGPL-3.0), so it is distributed
+                            under the same licence. Anyone redistributing it,
+                            or a derivative of it, must comply with AGPL-3.0
+                            for that code; this does not extend to the rest of
+                            the repository.
+
+  tex/, figures/            The paper's text, tables and figures: Creative
+                            Commons Attribution 4.0 International (CC BY 4.0),
+                            https://creativecommons.org/licenses/by/4.0/.
+
+Third-party code and model weights are not included; they are installed or
+downloaded under their own terms (as stated by their releases):
+
+  Aurora 1.5 weights and microsoft-aurora   MIT
+  Pangu-Weather official weights            CC BY-NC-SA 4.0 (non-commercial)
+  pangu-pytorch reimplementation            no licence stated; not redistributed
+  FourCastNet weights (nvidia/fourcastnet1) Apache-2.0
+  SFNO checkpoint (sfno_73ch_small)         Apache-2.0
+  earth2studio, makani                      Apache-2.0
+  torch-harmonics                           BSD-3-Clause
+  FastNet weights (MetOffice/FastNet-global) Open Government Licence v3.0
+  fastnet-inference                         AGPL-3.0
+  ERA5                                      CC BY 4.0 (Copernicus Climate Change Service)
