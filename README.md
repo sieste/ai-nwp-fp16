@@ -89,8 +89,8 @@ Data and checkpoints can be kept outside the repository by setting
 ## Data
 
 The scores, sensitivity, headroom, storm, benchmark and location results
-behind the paper's figures and tables are archived at Zenodo: *DOI to
-follow*. Unpacked into `data/results/`, they let `nwpprec.plots` redraw the
+behind the paper's figures and tables are archived at Zenodo:
+[doi:10.5281/zenodo.23887144](https://doi.org/10.5281/zenodo.23887144). Unpacked into `data/results/`, they let `nwpprec.plots` redraw the
 figures and tables without rerunning the forecasts (except the maps, bands
 and spectra, which need the regional statistics of step 4).
 
