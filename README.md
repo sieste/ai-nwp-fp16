@@ -3,6 +3,9 @@
 Code and paper for *Half-precision inference of AI weather prediction
 models: negligible loss of skill at a fraction of the cost* (Siegert, 2026).
 
+Archived at Zenodo: code [doi:10.5281/zenodo.23888734](https://doi.org/10.5281/zenodo.23888734),
+results [doi:10.5281/zenodo.23887144](https://doi.org/10.5281/zenodo.23887144).
+
 Five publicly available AI weather models -- Aurora (deterministic and
 ensemble checkpoints), Pangu-Weather, FourCastNet, SFNO and FastNet -- are run
 on a single 16 GB GPU from 52 initial dates in 2024, in fp32 and with their
