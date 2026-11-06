@@ -1,12 +1,5 @@
 \documentclass[11pt]{article}
 
-% ---------------------------------------------------------------------------
-% DRAFT STATUS: funnel-method skeleton. Section/subsection structure and
-% paragraph TOPIC SENTENCES only -- not full prose yet. TODO notes (in red)
-% mark open decisions, missing figures, and citations to verify before this
-% goes further. Review this structure before we expand any section.
-% ---------------------------------------------------------------------------
-
 \usepackage[margin=1in]{geometry}
 \usepackage{graphicx}
 \usepackage{amsmath}
@@ -15,6 +8,7 @@
 \usepackage[round,authoryear]{natbib}
 \usepackage{xcolor}
 \usepackage{hyperref}
+\newcommand{\doi}[1]{\href{https://doi.org/#1}{doi:~#1}}
 
 \parskip=5mm
 \parindent=0mm
@@ -27,19 +21,14 @@
 \renewcommand{\floatpagefraction}{0.75}
 
 \newcommand{\todo}[1]{\textcolor{red}{\textbf{[TODO: #1]}}}
-\newcommand{\topicsentence}[1]{#1}
-\definecolor{reviewgreen}{RGB}{0,200,0}
-\newcommand{\reviewnote}{\textcolor{reviewgreen}{\textbf{[addressing the above TODO]}}\ }
-\newcommand{\updatenote}{\textcolor{reviewgreen}{\textbf{[updated to the 2024, $N{=}52$ results]}}\ }
-\newcommand{\additionnote}{\textcolor{reviewgreen}{\textbf{[new addition]}}\ }
-% Bold one-line paragraph summaries for skimming the structure; \skimfalse hides them all.
-\newif\ifskim \skimtrue
+% Bold one-line paragraph summaries for skimming the structure; \skimtrue shows them.
+\newif\ifskim \skimfalse
 \newcommand{\skim}[1]{\ifskim\textbf{#1}\ \fi}
 
 \title{Half-precision inference of AI weather prediction models: negligible loss of skill at a fraction of the cost}
 
-\author{Stefan Siegert\footnote{University of Exeter, \texttt{s.siegert@exeter.ac.uk}}}
-\date{\today}
+\author{Stefan Siegert\footnote{Department of Mathematics and Statistics, University of Exeter, \texttt{s.siegert@exeter.ac.uk}}}
+\date{6 November 2026}
 
 \begin{document}
 
@@ -57,7 +46,7 @@ physical state must stay in fp32: converting the whole model rounds it
 in physical units, which in fp16 overflows and in bf16 discards
 meaningful information. With the state, its normalisation and
 denormalisation in fp32, running the network in fp16 changes the global
-RMSE by at most 1.4\%, and by less than 0.5\% for four of the five
+RMSE by at most 1.4\%, and by about 0.5\% or less for four of the five
 models, equivalent to less than one hour of lead time up to day 8 and at
 most two hours at day 10. The differences show no systematic pattern by
 region, scale or for tropical and extratropical storms, apart from a
@@ -85,13 +74,20 @@ and simple 8-bit quantisation costs far more skill.
 \section*{Data and Code Availability}
 \skim{Code and data availability.}
 All code is available at \url{https://github.com/sieste/ai-nwp-fp16}
-(archived at Zenodo, \url{https://doi.org/10.5281/zenodo.23888734}). Its Python package \texttt{nwpprec} runs
-every forecast, experiment, figure and table in this paper; the
+(archived at Zenodo, \citealp{siegert2026code}). Its Python package \texttt{nwpprec} runs
+the forecasts and experiments and produces the figures and tables in this
+paper, apart from the tests of 8-bit inference with \texttt{torchao} on Aurora
+and the layer-by-layer int8 test of FastNet; the
 repository also holds the exact software environments, a check that the
 stored results are reproduced, and the source of this paper. The scores
-and other results behind the figures and tables are archived at Zenodo,
-\url{https://doi.org/10.5281/zenodo.23887144}. ERA5 is available from the Copernicus Climate Data
+and other results behind the figures and tables are archived at Zenodo
+\citep{siegert2026data}. ERA5 is available from the Copernicus Climate Data
 Store, and the model checkpoints from their releases, listed below.
+
+\skim{Use of generative AI.}
+The author used a generative AI model (Anthropic Claude Sonnet 5.5 and Opus 5.5) to write and test
+code, run experiments, and draft text of this paper. The author designed the research, directed and
+checked the work, reviewed and revised all text, and takes full responsibility for the content.
 
 \skim{Licences of the checkpoints, the code they need and the data.}
 The checkpoints are used under the terms stated by their
@@ -105,7 +101,7 @@ Apache-2.0 but are derived from the official ones, so we treat them as
 non-commercial too, and the reimplementation's code carries no licence and
 is not redistributed in our repository. FourCastNet: weights
 (\texttt{nvidia/fourcastnet1} on Hugging Face) under Apache-2.0, loaded
-with NVIDIA's Apache-2.0-licensed \texttt{earth2studio}. SFNO: checkpoint
+with the Apache-2.0-licensed \texttt{earth2studio}. SFNO: checkpoint
 (\texttt{sfno\_73ch\_small} on NVIDIA NGC) under Apache-2.0, run with
 \texttt{earth2studio}, \texttt{makani} (Apache-2.0) and
 \texttt{torch-harmonics} (BSD-3-Clause). FastNet: weights British Crown
@@ -120,7 +116,7 @@ non-commercial purposes. ERA5 is distributed by the Copernicus Climate
 Change Service under CC~BY~4.0 \citep{hersbach2020era5}.
 
 \section*{Acknowledgments}
-\todo{}
+I thank Harris Sop Nkuiate for useful discussions throughout this project.
 
 \bibliographystyle{plainnat}
 \bibliography{references}

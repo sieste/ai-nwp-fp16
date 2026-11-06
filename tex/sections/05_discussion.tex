@@ -2,7 +2,7 @@
 \label{sec:discussion}
 
 \skim{Recommendation: keep the state in fp32 and run the network in fp16, after checking the range.}
-For research use of AI weather models on a single GPU, our results
+For running AI weather models on a modest research setup with a single consumer-grade GPU, our results
 support running the network in fp16 with the physical state,
 normalisation and denormalisation in fp32. The change in skill is
 statistically detectable with 52 paired dates but small in practical
@@ -12,7 +12,7 @@ the five models, and about 1.4 for SFNO. Two conditions
 come with this recommendation. First, the conversion must leave the
 state in fp32: the one-line conversion of a whole model does not, and
 for some models it fails silently, as for SFNO, whose complex weights
-lose their imaginary parts (Appendix~\ref{sec:appendix-precision}). Second, fp16's numeric range
+lose their imaginary parts. Second, fp16's numeric range
 must be checked for each model, as we did with hooks on every module
 (\S\ref{sec:results-headroom}); the margins we found differ by more than
 a factor of ten between models, and a model trained or fine-tuned
@@ -25,12 +25,12 @@ follows neither model size nor fp32 skill. The two smallest models,
 FastNet and FourCastNet, depart furthest from their fp32 forecasts
 (Figure~\ref{fig:fp16-departure}), but Pangu-Weather and SFNO, of
 intermediate size, depart least, and Aurora, the largest, lies in
-between. SFNO has the largest z500 error of the five models yet is the
+between. SFNO has among the largest z500 errors of the five models yet is the
 least affected by fp16, while Pangu-Weather and Aurora, the most skilful,
 are affected little and moderately. The one model clearly more affected by fp16, FourCastNet, does not stand
 out by size or skill: it has the largest changes in RMSE (up to 1.4\%,
 against about 0.5\% at most for the others), the largest departure from
-its fp32 forecasts relative to its error at day 1 (8\%, against
+its fp32 forecasts relative to its error at day 1 (8\% in the mean over variables, against
 1--5\%) and a tropical z500 penalty of up to 12\%
 (\S\ref{sec:results-fp16}, \S\ref{sec:results-where}). A plausible cause is its
 architecture, in particular its adaptive Fourier filters on the flat
@@ -48,13 +48,10 @@ The computing power used for machine learning is increasingly
 concentrated in industry, and academic groups have become less
 represented in compute-intensive research
 \citep{ahmed2020dedemocratization, besiroglu2024compute}. Hardware with
-more memory has also become harder to afford: between November 2025 and
-October 2026, German retail prices of NVIDIA's RTX~50 consumer GPUs rose
-by 66\% on average, by 132\% for the 32\,GB RTX~5090 and by more than
-70\% for a 16\,GB model, while 8\,GB models were reported to remain
-available near their launch prices \citep{techtimes2026gpu}, as graphics
-memory is increasingly taken up by AI hardware
-\citep{trendforce2026memory}. This study also shows what direct access to
+more memory has also become harder to afford: retail prices of consumer GPUs
+have risen sharply, and most for the models with the most memory
+\citep{techtimes2026gpu}, as graphics memory is increasingly taken up by AI
+hardware \citep{trendforce2026memory}. This study also shows what direct access to
 a modest local GPU offers over rented or remote hardware. Short tests
 between experiments, such as those that located a memory leak in SFNO's
 software or FastNet's sensitive layer in int8, took minutes and could
@@ -86,8 +83,8 @@ dates; they rank the parts of each network but do not show how errors
 introduced there affect skill at longer lead times.
 
 \skim{Where only bf16 is fast, keeping the most sensitive components in fp32 may recover part of its penalty.}
-The recommendation assumes hardware with fast fp16 arithmetic,
-which NVIDIA GPUs have had since 2017. Google's TPUs, on which several AI
+The recommendation assumes hardware with fast fp16 arithmetic
+(\S\ref{sec:quantisation}). Google's TPUs, on which several AI
 weather models are developed, multiply matrices in bf16
 \citep{wang2019bfloat16}; there bf16 is the natural 16-bit format, and
 our results suggest it costs more skill (\S\ref{sec:results-bf16}). The
@@ -110,6 +107,6 @@ with a few neighbours. Whether such formats, perhaps with quantisation-aware
 fine-tuning, make 8- or 4-bit inference of weather models as accurate as
 fp16 is open, as is whether they would be faster for models such as
 Aurora, whose memory and time are dominated by intermediate results
-rather than weights (Appendix~\ref{sec:appendix-precision}). The paired
+rather than weights. The paired
 design and module hooks used here would answer the first question
 directly.

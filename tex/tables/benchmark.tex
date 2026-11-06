@@ -1,7 +1,7 @@
 \begin{table}[tbp]
 \centering
 \small
-\caption{Inference cost on one NVIDIA GeForce RTX 5080: mean time per model step (first step of each forecast untimed, at least 60\,s of timed steps; FourCastNet, FastNet, SFNO and Aurora step 6\,h, Pangu-Weather 24\,h), speed-up over fp32, time for a 10-day forecast, peak allocated GPU memory, and energy for a 10-day forecast (mean GPU power within the timed steps, sampled every 50\,ms, times their duration). fp16: network in fp16, state in fp32. With the network in bf16 instead, time per step, peak memory and energy differ from fp16 by at most 2\%, 1\% and 3.4\%.}
+\caption{Inference cost on one RTX 5080: mean time per model step (first step of each forecast untimed, at least 60\,s of timed steps; FourCastNet, FastNet, SFNO and Aurora step 6\,h, Pangu-Weather 24\,h), speed-up over fp32, time for a 10-day forecast, peak allocated GPU memory, and energy for a 10-day forecast (mean GPU power within the timed steps, sampled every 50\,ms, times their duration). fp16: network in fp16, state in fp32. With the network in bf16 instead, time per step, peak memory and energy differ from fp16 by at most 2\%, 1\% and 3.4\%.}
 \label{tab:benchmark}
 \begin{tabular}{llrrrrr}
 \toprule

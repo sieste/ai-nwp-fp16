@@ -5,13 +5,13 @@
 \label{sec:models}
 
 \skim{Five models from three architecture families, all with fp32 weights.}
-We study five AI weather models from three architecture families, all
-released with fp32 weights (Table~\ref{tab:models}). They were chosen
+We study five AI weather models from three architecture families
+(Table~\ref{tab:models}). They were chosen
 from the models whose trained weights are publicly available and that
 can be run in PyTorch on a single GPU with 16\,GB of memory, to cover
 the main architecture families in current use: transformers (Aurora, Pangu-Weather), models that process
 the fields in spectral space (FourCastNet, SFNO), and a graph neural
-network (FastNet). Table~\ref{tab:models} summarises them. All are
+network (FastNet). All are
 released with fp32 weights and run in fp32 by default; the fp32 forecast
 is therefore the reference against which every reduced-precision
 forecast is compared. All except FastNet run on the regular
@@ -23,9 +23,10 @@ Pangu-Weather advance the forecast in 6-hour steps.
 \footnotesize
 \caption{Models studied. Variables: number of surface variables plus
 number of atmospheric variables $\times$ number of pressure levels
-(FourCastNet: 18 atmospheric fields of 5 variables on selected levels).
-Runtime: time per forecast step in fp32 on an NVIDIA GeForce RTX~5080
-GPU (16\,GB; Table~\ref{tab:benchmark}).}
+(FourCastNet: 18 atmospheric fields on selected levels, see text; Aurora:
+inputs, with seven further surface variables output only).
+Runtime: time per forecast step in fp32 on our 16\,GB GPU
+(Table~\ref{tab:benchmark}).}
 \label{tab:models}
 \setlength{\tabcolsep}{4pt}
 \begin{tabular}{lllllrrl}
@@ -57,8 +58,9 @@ physical variables. We use version~1.5 \citep{aurora_docs} in two
 checkpoints from the same release: a deterministic one and an ensemble
 one. The two have almost the same architecture and training data, but
 the ensemble checkpoint adds random noise inside the model, so that
-different random seeds give different ensemble members, and was trained
-with a different loss function.
+different random seeds give different ensemble members, and was fine-tuned
+with the continuous ranked probability score (CRPS) as its loss instead
+of the mean absolute error (MAE) \citep{weyn2026aurora15}.
 
 \skim{Pangu-Weather: a 3D transformer with 24-hour steps, run through a PyTorch reimplementation.}
 Pangu-Weather \citep{bi2023pangu} is a 3D transformer with a
@@ -72,7 +74,14 @@ component, so we use a third-party PyTorch reimplementation of the
 24-hour model with the official weights \citep{pangu_pytorch}.
 
 \skim{FourCastNet: a Fourier model whose complex arithmetic uses real-valued weights.}
-FourCastNet \citep{pathak2022fourcastnet} (version~1, 26 variables)
+FourCastNet \citep{pathak2022fourcastnet} (version~1) has 26 variables in the released
+checkpoint (the original paper describes 20):
+8 surface or single-level fields (10\,m and 100\,m wind, 2\,m temperature,
+surface and mean sea-level pressure, total column water vapour) and 18
+atmospheric fields, with each variable on its own subset of levels:
+geopotential at 1000, 850, 500, 250 and 50\,hPa; the wind components at
+1000, 850, 500 and 250\,hPa; temperature at 850, 500 and 250\,hPa; and
+relative humidity at 850 and 500\,hPa. It
 mixes information between grid points with an Adaptive Fourier Neural
 Operator \citep{guibas2022afno}, which multiplies the Fourier transform
 of the internal fields by learned complex-valued filters. The Fourier
@@ -81,7 +90,7 @@ than a sphere. Although the filters are complex-valued, the
 implementation stores their real and imaginary parts as separate
 real-valued weights and carries out the complex multiplication with
 real arithmetic, so the model can be converted to 16 bits, with one
-small change to its code (Appendix~\ref{sec:appendix-precision}).
+small change to its code.
 
 \skim{FastNet: a graph neural network on a 1-degree grid, regridded to 0.25 degrees for verification.}
 FastNet \citep{dunstan2025fastnet, daub2025fastnet}, developed by the
@@ -102,14 +111,13 @@ verification (\S\ref{sec:verification-data}), so that all models are
 scored on the same grid against the same truth.
 
 \skim{SFNO: a spherical Fourier model with complex-valued filters.}
-SFNO \citep{bonev2023sfno} (NVIDIA's \texttt{sfno\_73ch\_small}
+SFNO \citep{bonev2023sfno} (the \texttt{sfno\_73ch\_small}
 checkpoint, version~0.1.0) replaces FourCastNet's flat Fourier transform
 with a transform in spherical harmonics, which respects the geometry of
 the sphere. It forecasts eight surface variables and five atmospheric
 variables on 13 pressure levels. Its spectral filters, 97.8\% of its
 parameters, are complex-valued; in 16 bits we apply them as real and
-imaginary parts, as FourCastNet does
-(Appendix~\ref{sec:appendix-precision}).
+imaginary parts, as FourCastNet does.
 
 \skim{Models considered but not included: AIFS and GraphCast.}
 We also considered two further models. ECMWF's AIFS \citep{lang2024aifs}
@@ -211,7 +219,7 @@ network is converted.
 In the \emph{fp16} and \emph{bf16} runs, every weight and every
 computation of the network is in that format, while the normalisation of
 the inputs, the denormalisation of the outputs and the state carried from
-one step to the next stay in fp32. The normalised fields are rounded to 16
+one forecast step to the next stay in fp32. The normalised fields are rounded to 16
 bits when they enter the network, and its output is converted back to
 fp32 before it is denormalised. For Aurora, the input fields are kept and
 normalised in fp32 and rounded on entry to the encoder; for
@@ -228,18 +236,17 @@ Because current GPUs sum the products in a 16-bit matrix multiplication
 in fp32, the main source of error within the network is the rounding of
 these stored values rather than the arithmetic within an operation. A
 few operations are computed in fp32 on 16-bit inputs: FourCastNet's
-Fourier transforms and SFNO's spherical harmonic transforms
-(Appendix~\ref{sec:appendix-precision}). FourCastNet's network is converted component by
+Fourier transforms and SFNO's spherical harmonic transforms. FourCastNet's network is converted component by
 component (Table~\ref{tab:components}), which leaves its positional
 embedding, part of no component, in fp32. Further numerical details are
-given in Appendix~\ref{sec:appendix-precision}.
+given in the code's \texttt{nwpprec/README.md} \citep{siegert2026code}.
 
 \skim{fp32 reference: the model as PyTorch runs it by default; Aurora needs weight streaming to fit.}
 The fp32 reference is each model as PyTorch runs it by default. This
 includes one deviation from strict fp32 that we kept deliberately:
 PyTorch computes convolutions, which occur in the input and output
 layers of Aurora, Pangu-Weather and FourCastNet, in the reduced-precision
-format TF32 by default (Appendix~\ref{sec:appendix-precision}). Aurora
+format TF32 by default. Aurora
 does not fit in 16\,GB of GPU memory in fp32; its fp32 runs therefore
 move the backbone weights to the GPU one block at a time and compute
 the decoder in spatial portions. This makes them slower
@@ -249,18 +256,15 @@ bit-identical results.
 \skim{Other approaches: automatic mixed precision keeps fp32 weights and saves less memory.}
 The approach used here is a \emph{persistent} conversion: the model is
 converted once and the fp32 weights are discarded. The most common
-alternative is automatic mixed precision \citep{micikevicius2018mixed},
-the standard for training and the default inference mode of some AI
-weather models, such as Aurora~1.5 (\S\ref{sec:introduction}), which keeps the weights in
-fp32 and converts values to 16 bits only for individual operations,
-mainly matrix multiplications, while operations considered numerically
-sensitive, such as normalisations and sums, stay in fp32. This protects
-accuracy but saves little memory: in its default fp16 mixed-precision
-mode, Aurora~1.5 runs out of memory on our 16\,GB GPU in the first
-forecast step, whereas the persistently converted fp16 or bf16 model
-needs at most 11.6\,GB (Table~\ref{tab:benchmark}). The persistent conversion is the harsher of the two for
-accuracy, so the costs reported here are those of the configuration that
-fits on such a GPU, not of the models' default inference modes.
+alternative, automatic mixed precision \citep{micikevicius2018mixed}, is the
+default inference mode of some models, such as Aurora~1.5. It keeps the
+weights in fp32 and converts values to 16 bits only for individual operations.
+This protects accuracy but saves little memory: in this mode, Aurora~1.5 runs
+out of memory on our 16\,GB GPU in the first forecast step, whereas the
+persistently converted model needs at most 11.6\,GB
+(Table~\ref{tab:benchmark}). The persistent conversion is the harsher of the
+two for accuracy, so the costs reported here are those of the configuration
+that fits on such a GPU.
 
 \skim{Other approaches: integer and 8-bit formats need calibration and were not pursued.}
 A larger literature concerns quantisation to integers (int8, int4),
@@ -276,12 +280,14 @@ such methods, including ones developed for language models
 \citep{micikevicius2022fp8}. We did not pursue these formats: they need
 calibration and low-precision implementations of every operation, and in
 tests with Aurora they were either slower than bf16 or did not fit in
-16\,GB (Appendix~\ref{sec:appendix-precision}). fp16 and bf16 are the
+16\,GB. fp16 and bf16 are the
 reduced-precision formats that most users of these models can apply
 directly: they need no calibration, and fast fp16 arithmetic is
-available on NVIDIA GPUs from 2017 on, bf16 arithmetic from 2020 on, in
-consumer and data-centre models alike \citep{nvidia2017volta,
-nvidia2020ampere}.
+available on NVIDIA GPUs from 2017 on, bf16 arithmetic from 2020 on
+\citep{nvidia2017volta, nvidia2020ampere}, and both on current consumer and
+data-centre models. On CPUs, by contrast, fast fp16 arithmetic is
+not usually available, so the speedups reported here should not be
+expected to carry over to them.
 
 
 \subsection{Model verification}
@@ -294,8 +300,8 @@ latitude--longitude grid ($721\times1440$ points), the reference
 commonly used to evaluate AI weather models
 \citep{rasp2020weatherbench}. Models that take two input times (Aurora)
 receive the analyses at the initial time and six hours earlier.
-FourCastNet's grid omits the southernmost row of the ERA5 grid, which is
-therefore not scored for this model. Aurora~1.5 was fine-tuned last on
+The grids of Aurora and FourCastNet omit the southernmost row of the ERA5
+grid, which is therefore not scored for these models. Aurora~1.5 was fine-tuned last on
 operational IFS analyses rather than ERA5 \citep{aurora_docs}; starting
 it from ERA5 may lower its fp32 skill slightly, but affects its fp32
 and fp16 forecasts alike.
@@ -314,7 +320,7 @@ checkpoint's documentation gives no training period; the SFNO paper,
 which it cites, trains its 73-variable models on 1979--2015 with 2016 and
 2017 for validation \citep{bonev2023sfno}, the same split into training,
 validation and out-of-sample data that the checkpoint's stored
-configuration records, and NVIDIA's SFNO inference service lists ERA5
+configuration records, and the developer's SFNO inference service lists ERA5
 from 1979--2017. Either way, 2024 lies outside it.
 
 \skim{FastNet's forecasts are interpolated to the 0.25-degree grid before verification.}
@@ -323,12 +329,11 @@ FastNet runs on the O96 grid of about 1$^\circ$ resolution
 interpolation of the 0.25$^\circ$ ERA5 fields onto the O96 points, and
 its forecasts are interpolated back to the 0.25$^\circ$ grid by linear
 interpolation on the Delaunay triangulation of the O96 points, so that
-all models are scored on the same grid against the same truth. Every
-FastNet score in this paper goes through this step. Nearest-neighbour
-interpolation, computed as a check, raises FastNet's RMSE by up to
-51\%, because the interpolated fields are blockier, but changes its
-bf16 penalty by less than 0.4 percentage points in every case, so the
-precision results do not depend on the choice of interpolation.
+all models are scored on the same grid against the same truth. The grid
+points outside the triangulation, about 1.6\% (a gap at the 0$^\circ$
+meridian and the rows at the poles), have no interpolated value and are not
+scored for FastNet. Every
+FastNet score in this paper goes through this step.
 
 \skim{Five variables at daily lead times, globally, in three regions and at five locations.}
 We verify 2\,m temperature (2t), mean sea-level pressure (msl),
@@ -356,4 +361,4 @@ area mean of the ensemble variance, compared with the RMSE of the
 ensemble mean after correcting for the finite ensemble size
 \citep{leutbecher2008ensemble}; and by the fraction of grid points at
 which ERA5 lies outside the range of the ensemble, which for a
-calibrated ensemble of $M$ members is $2/(M+1)$ \citep{hamill2001rank}.
+calibrated ensemble of $M$ members is $2/(M+1)$ \citep{siegert2011outliers}.

@@ -14,7 +14,7 @@ WMO's standard verification area \citep{wmo2010gdpfs}. The
 locations span oceanic, monsoon, Mediterranean, continental and
 subtropical-highland climates in both hemispheres. The Bay Area box
 includes points over the bay and the Pacific. In addition, error sums on
-$10^\circ$ cells give latitude bands and land/sea averages
+$10^\circ$ cells give latitude bands
 (\S\ref{sec:methods-further}).
 
 \begin{table}[tbp]
@@ -82,10 +82,11 @@ it as the lead time over which the fp32 RMSE grows by the same amount
 
 \skim{The design detects changes of a few hundredths to a few tenths of a percent globally.}
 To show what this design can detect, we compute for each combination
+the minimum detectable effect \citep{bloom1995minimum,cohen1988statistical}:
 the smallest change in mean RMSE that the paired $t$-test detects with
 80\% probability, given $N=52$ dates and the observed standard deviation
-$s$ of the per-date differences: $(t_{0.975,N-1}+t_{0.8,N-1})\,s/\sqrt{N}$
-(Table~\ref{tab:power}). This is based on the observed variability, not
+$s$ of the per-date differences, $(t_{0.975,N-1}+t_{0.8,N-1})\,s/\sqrt{N}$
+(Appendix~\ref{sec:appendix-mde}, Table~\ref{tab:power}). This is based on the observed variability, not
 on the observed effect, so it describes the sensitivity of the design
 rather than the probability that the reported effects are real.
 Globally, the median detectable change is 0.03--0.33\% of the fp32 RMSE,
@@ -107,10 +108,10 @@ Table~\ref{tab:components}: one component at a time runs in fp16 and the
 rest of the network in fp32, which measures the departure that the
 component causes on its own. The inputs of the component are rounded to
 fp16 when they enter it, and its outputs converted back to fp32 when they
-leave it. This corresponds to the variant of activation patching used to
-locate computations in language models in which a component is perturbed
-in an otherwise clean model \citep{meng2022locating,
-heimersheim2024activation}. One-at-a-time designs cannot detect
+leave it. This corresponds to the noising variant of activation patching, in which a
+component is perturbed in an otherwise clean model
+\citep{heimersheim2024activation}, a technique used to locate computations
+in language models \citep{meng2022locating}. One-at-a-time designs cannot detect
 interactions between components \citep{saltelli2010perfunctory}; we
 check for them by comparing the components' effects with that of the
 whole network (\S\ref{sec:results-sensitivity}), and we also run the
@@ -131,8 +132,8 @@ the component causes on its own.
 The one-at-a-time design asks where in the network the rounding
 matters. Practice in other applications of reduced precision suggests
 three other ways in which sensitivity could concentrate: in certain types
-of operation, such as normalisation and softmax, which mixed-precision
-training keeps in fp32 \citep{micikevicius2018mixed}; in a few channels
+of operation, such as normalisation and softmax, whose sums mixed-precision
+training carries out in fp32 \citep{micikevicius2018mixed}; in a few channels
 with outsized values, which dominate the quantisation error of large
 language models \citep{dettmers2022llmint8}; and towards the end of the
 network, if rounding errors accumulate with depth. Whether these carry
@@ -153,8 +154,8 @@ contain no run-to-run variation.
 \subsection{Further diagnostics}
 \label{sec:methods-further}
 
-\skim{Latitude bands, maps and land/sea averages from statistics on 10-degree cells.}
-Latitude bands, maps and land/sea averages (\S\ref{sec:results-where})
+\skim{Latitude bands and maps from statistics on 10-degree cells.}
+Latitude bands and maps (\S\ref{sec:results-where})
 are computed from cos-latitude-weighted sums of the squared error, the
 error and the squared departure from the fp32 forecast, accumulated on
 $10^\circ\times10^\circ$ cells for every forecast, variable and lead
@@ -167,7 +168,9 @@ compute, in the same runs, the zonal power spectrum of each forecast
 field and of ERA5 -- the squared magnitude of its Fourier transform along
 each latitude circle -- averaged with cos-latitude weights over each
 $10^\circ$ latitude band. We compare the spectra of each model up to the
-smallest scale it resolves (Appendix~\ref{sec:appendix-spectra}).
+smallest scale it resolves, set by its patch size (Aurora and Pangu-Weather),
+the wavenumbers its spectral filters act on (FourCastNet), its spherical
+harmonic truncation (SFNO) or its grid spacing (FastNet).
 
 \skim{Ensemble: Aurora's ensemble checkpoint, 8 members on 13 dates, the same noise in fp32 and fp16.}
 Aurora's ensemble checkpoint is run on every fourth of the 52
@@ -195,9 +198,11 @@ module's output infinite or undefined.
 \skim{Storm tracks: four named storms of 2024 tracked by their pressure minimum.}
 For a qualitative view of high-impact weather, we track four named
 storms of 2024 whose initialisation is one of the 52 dates: the
-extratropical storms Isha (initialised 20 January 00\,UTC) and Kathleen
-(5 April 18\,UTC), and the hurricanes Beryl (1 July 00\,UTC) and Milton
-(7 October 00\,UTC). Each storm is followed in ERA5 and in each forecast
+extratropical storms Isha (initialised 20 January 00\,UTC;
+\citealp{metoffice2024isha}) and Kathleen (5 April 18\,UTC;
+\citealp{metoffice2024kathleen}), and the hurricanes Beryl (1 July 00\,UTC;
+\citealp{beven2025beryl}) and Milton (7 October 00\,UTC;
+\citealp{beven2025milton}). Each storm is followed in ERA5 and in each forecast
 by the minimum of mean sea-level pressure within 700\,km (extratropical)
 or 400\,km (tropical) of its previous position per 6 hours, starting from
 its ERA5 position (for Isha, from 21 January 12\,UTC, when it has become a

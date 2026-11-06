@@ -8,6 +8,6 @@ authors:
     orcid: "https://orcid.org/0000-0001-8938-2823"
 repository-code: "https://github.com/sieste/ai-nwp-fp16"
 license: MIT
-version: "1.0.0"
-doi: 10.5281/zenodo.23888734
-date-released: "2026-11-02"
+version: "1.0.1"
+doi: 10.5281/zenodo.24010291
+date-released: "2026-11-06"

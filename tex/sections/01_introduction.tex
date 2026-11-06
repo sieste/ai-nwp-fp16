@@ -11,7 +11,7 @@ such as GraphCast \citep{lam2023graphcast}, Pangu-Weather
 \citep{bi2023pangu} and Aurora \citep{bodnar2024aurora} match or exceed
 the skill of ECMWF's high-resolution forecast on many standard
 verification scores, and ECMWF now runs its own AI model, AIFS,
-operationally \citep{lang2024aifs}. Independent assessments
+operationally \citep{lang2024aifs, ecmwf2026aifscard}. Independent assessments
 against ECMWF's operational forecasts confirm that several of these models
 match or exceed it on many headline scores, while differences remain, for
 example in the intensity of extremes and the smoothness of the forecast
@@ -24,7 +24,7 @@ physics-based model on a supercomputer \citep{pathak2022fourcastnet,
 bi2023pangu, lam2023graphcast}. Part of that gap reflects
 the hardware rather than the method: ported to GPUs, physics-based models
 run substantially faster than on CPUs \citep{fuhrer2018near}, by factors
-of 6.4 node for node for ICON-A \citep{giorgetta2022icon} and 5.6
+of 6.4 node for node for ICON-A \citep{giorgetta2022icon} and 5.5
 socket for socket for the operational ICON of MeteoSwiss
 \citep{lapillonne2026icon}. Much of the remaining gap comes from the AI
 models' longer time steps and coarser resolution; NeuralGCM, for example,
@@ -33,14 +33,14 @@ attributes its savings of three to five orders of magnitude to running at
 cloud-resolving models \citep{kochkov2024neural}. Cost nevertheless remains a constraint in research.
 Studies that run a model many times -- over many initial dates, as
 ensembles, or in sensitivity experiments -- multiply the cost of a
-single forecast, and are often carried out on a single workstation GPU
-rather than on a supercomputer.
+single forecast, and are often carried out on a single research computer
+rather than an HPC cluster.
 
 \skim{GPU cost grows with memory, and inference dominates the energy use of machine learning.} The
 size of a model that fits in GPU memory is often the binding constraint.
 A consumer GPU with 16\,GB, such as the NVIDIA GeForce
-RTX~5080 used in this study, launched at US\$999, and the model with
-32\,GB at twice that \citep{nvidia2025rtx50}; GPUs with more memory are
+RTX~5080 used in this study, launched at half the price of the model
+with 32\,GB \citep{nvidia2025rtx50}; GPUs with more memory are
 data-centre products, and access to large amounts of compute is
 increasingly concentrated in industry rather than in academia
 \citep{besiroglu2024compute}. Reducing the cost of running a model
@@ -67,7 +67,7 @@ model to lower precision is commonly called \emph{quantisation}; the
 term covers both reduced-precision floating-point formats and integer
 formats, which need additional scaling. In this paper it refers to
 running a model whose released weights are in fp32 with its network in
-fp16 or bf16. The formats, and the different ways a model can be run in
+fp16 (or bf16). The formats, and the different ways a model can be run in
 reduced precision, are described in \S\ref{sec:quantisation}.
 
 \skim{Reduced precision is already used in AI weather models, but its effect on skill is unreported.}
@@ -132,18 +132,15 @@ keeps its accuracy when it is afterwards run entirely in 16 bits is a
 separate question: even a model trained with bf16 arithmetic, such as
 Aurora, is released with fp32 weights, because standard
 mixed-precision training keeps an fp32 master copy of the weights and
-leaves parts of the computation, such as normalisation, in fp32
+carries out the sums in normalisation and softmax layers in fp32
 \citep{micikevicius2018mixed}. Research on quantisation shows that sensitivity to
 reduced precision is unevenly distributed across a network. Image
 classification networks are conventionally quantised with their first
 and last layers kept at higher precision, ``as these have been reported
-to significantly impact accuracy'' \citep{choi2018pact}, and some methods
-assign a precision to each layer according to its estimated sensitivity
-\citep{dong2019hawq}. In large language models, a small fraction of
-the internal values or weights accounts for much of the quantisation
-error, and keeping that fraction at higher precision recovers most of
-the accuracy \citep{dettmers2022llmint8, xiao2022smoothquant,
-lin2023awq}. Weather models differ from these applications in one
+to significantly impact accuracy'' \citep{choi2018pact}. In large language
+models, a small fraction of the internal values accounts for much of the
+quantisation error, and keeping that fraction at higher precision recovers
+most of the accuracy \citep{dettmers2022llmint8}. Weather models differ from these applications in one
 respect that matters here: they are run autoregressively, each forecast
 step taking the previous step's output as input, so that errors
 introduced by reduced precision can grow over a forecast.
@@ -172,18 +169,18 @@ and output layers.
 \skim{Five models, 52 dates, network in fp16 with the state in fp32.}
 We run five publicly available AI weather models -- Aurora (in a
 deterministic and an ensemble version), Pangu-Weather, FourCastNet,
-SFNO and FastNet -- on a single 16\,GB GPU\footnote{NVIDIA GeForce RTX~5080.}, from 52 initial dates in
+SFNO and FastNet -- on a single 16\,GB GPU, from 52 initial dates in
 2024, in fp32 and with their networks in fp16, and compare the forecasts
 with each other and with ERA5. Our contributions are:
 \begin{itemize}
 \item We show that the physical state of a model must stay in fp32: the
 simplest conversion of a whole model rounds it in physical units, which
 in bf16 discards meaningful information and in fp16 overflows. Keeping
-the state, its normalisation and denormalisation in fp32 costs almost
-nothing.
+the state, its normalisation and denormalisation in fp32 adds little
+memory or computation.
 \item With the state in fp32, running the network in fp16 changes the
-global RMSE by at most 1.4\% and for four of the five models by less
-than 0.5\%, equivalent to losing less than an hour of lead time up to
+global RMSE by at most 1.4\% and for four of the five models by about
+0.5\% or less, equivalent to losing less than an hour of lead time up to
 day 8 and at most two hours at day 10, while making a forecast 1.3--3.5
 times faster and 1.4--3.7 times cheaper in energy.
 \item We examine where the fp16 and fp32 forecasts differ -- by region,
@@ -191,8 +188,8 @@ latitude band, spatial scale, in tropical and extratropical storms and in
 an ensemble -- and find no systematic degradation beyond a small
 tropical penalty in FourCastNet.
 \item We show that fp16's limited numeric range is not a practical risk for
-these models: no value overflowed, and the largest values stay 38 to 544
-times below the limit.
+these models: no value of network internal activations or network outputs
+overflowed, and the largest values stay 38 to 544 times below the limit.
 \item We test where fp16 rounding enters the forecast and find that
 common rules of thumb carry over only partly: the first and last layers
 dominate for some models but not others, and no type of layer is

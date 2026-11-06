@@ -3,7 +3,7 @@
 Code and paper for *Half-precision inference of AI weather prediction
 models: negligible loss of skill at a fraction of the cost* (Siegert, 2026).
 
-Archived at Zenodo: code [doi:10.5281/zenodo.23888734](https://doi.org/10.5281/zenodo.23888734),
+Archived at Zenodo: code [doi:10.5281/zenodo.24010291](https://doi.org/10.5281/zenodo.24010291),
 results [doi:10.5281/zenodo.23887144](https://doi.org/10.5281/zenodo.23887144).
 
 Five publicly available AI weather models -- Aurora (deterministic and
@@ -16,7 +16,7 @@ state kept in fp32, and verified against ERA5.
 
 | | |
 |---|---|
-| `nwpprec/` | the Python package that runs every forecast, experiment, figure and table (see `nwpprec/README.md`) |
+| `nwpprec/` | the Python package behind the paper's forecasts, experiments, figures and tables (see `nwpprec/README.md`) |
 | `envs/` | the exact software environments, and how to install them |
 | `tests/` | unit tests of the package (`pytest tests`) |
 | `tex/` | the paper's LaTeX source and tables |

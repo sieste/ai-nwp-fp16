@@ -351,7 +351,7 @@ def whole_model_figure(model: str = "aurora", area: str = "global") -> None:
 def land_sea(other: str = "fp16", days=(1, 5, 10), variables=("2t", "msl", "ws10", "z500", "t850")) -> None:
     """Prints the change in RMSE (other vs fp32, %) over mostly-land cells
     (land fraction >= 50%) and almost entirely sea cells (< 5%), and the fp32
-    2t RMSE over both (the numbers of the land/sea paragraph)."""
+    2t RMSE over both."""
     from .regional import land_fraction
     land = land_fraction()
     masks = {"land": land >= 0.5, "sea": land < 0.05}
@@ -747,7 +747,7 @@ def cost_table() -> None:
         rows.append(r"\midrule")
     tex = "\n".join([
         r"\begin{table}[tbp]", r"\centering", r"\small",
-        r"\caption{Inference cost on one NVIDIA GeForce RTX 5080: mean time per model step (first step of each forecast untimed, "
+        r"\caption{Inference cost on one RTX 5080: mean time per model step (first step of each forecast untimed, "
         r"at least 60\,s of timed steps; FourCastNet, FastNet, SFNO and Aurora step 6\,h, Pangu-Weather 24\,h), speed-up over "
         r"fp32, time for a 10-day forecast, peak allocated GPU memory, and energy for a 10-day forecast (mean GPU power "
         r"within the timed steps, sampled every 50\,ms, times their duration). fp16: network in fp16, state in fp32. With the "

@@ -133,6 +133,58 @@ do, and what goes wrong otherwise:
 fp16 with fp32 inputs and outputs; `keep_fp32` does the reverse inside a
 converted network.
 
+## Numerical details of the reduced-precision runs
+
+- **16-bit arithmetic on the GPU.** On current NVIDIA GPUs, fp16 and bf16
+  matrix multiplications and convolutions run on tensor cores, which multiply
+  16-bit inputs but accumulate the products in fp32 within each operation,
+  rounding only the output to 16 bits. PyTorch's 16-bit normalisation, softmax
+  and reduction kernels likewise typically accumulate internally in fp32. The
+  dominant error of a 16-bit network is therefore the rounding of every stored
+  tensor (the weights once, the intermediate results after every operation),
+  which compounds with network depth and, in an autoregressive forecast, from
+  step to step. One PyTorch default qualifies this: 16-bit matrix
+  multiplications may use reduced-precision reductions in some algorithms
+  (`allow_fp16_reduced_precision_reduction` and
+  `allow_bf16_reduced_precision_reduction`, both enabled by default).
+- **TF32 in the fp32 runs.** PyTorch allows convolutions to use TF32, a format
+  with fp32's 8-bit exponent and a 10-bit mantissa (`cudnn.allow_tf32`, enabled
+  by default), whereas fp32 matrix multiplications do not use it by default.
+  On the RTX 5080 this setting is active: an fp32 convolution's relative error
+  against an fp64 reference is 3e-4 with it, 4e-7 without it, and 3e-3 in bf16.
+  "fp32" therefore means fp32 for every matrix multiplication and TF32 for the
+  convolutions, which occur in the patch embeddings of Aurora, Pangu-Weather and
+  FourCastNet, in Pangu-Weather's patch recovery, and in SFNO's encoder, decoder
+  and the 1x1 convolutions of its blocks, in the fp32 references and in the fp32
+  components of the one-at-a-time runs alike. FastNet contains no convolutions.
+  The default is kept deliberately, so that the reference is the model as a
+  typical user runs it, not a strictly fp32 configuration that requires changing
+  library settings.
+- **FourCastNet.** Its spectral filter layer converts its intermediate results
+  to fp32 before each Fourier transform, which therefore runs in fp32, and then
+  multiplies them with the weights, which fails once the weights are in 16 bits.
+  The adapter converts the results back to the precision of the weights after
+  the transform. With fp32 weights, the modified model gives bit-identical
+  results to the original.
+- **SFNO.** Its spectral filters are complex-valued. PyTorch (version 2.14, used
+  for every model) has no complex counterpart of bf16, and its complex fp16 type
+  lacks the batched matrix products the filters need on the GPU. In bf16 and
+  fp16, the real and imaginary parts of each filter are therefore stored as
+  separate weights in that precision, and the complex multiplication is carried
+  out with four real products. PyTorch's standard conversion of a whole model to
+  16 bits cannot be used for SFNO: it keeps only the real parts of complex
+  weights. SFNO's spherical harmonic transforms always run in fp32, as NVIDIA's
+  implementation prescribes.
+- **Integer and fp8 quantisation of Aurora.** Tested at full resolution with the
+  `torchao` library. Weight-only int8 and fp8 quantisation was 27-28% *slower* per
+  step than bf16, because the weights are converted back before every
+  multiplication in a forward pass whose speed is limited by computation rather
+  than memory access, and reduced peak memory by only about 10%, since the
+  intermediate results, not the weights, dominate memory use. Quantising both
+  weights and intermediate results to int8 or fp8 ran out of memory on the 16 GB
+  GPU, and benchmarks of isolated matrix multiplications showed dynamic int8 two
+  to seven times slower than bf16, with mixed results for fp8.
+
 ## Tests and checks
 
 Unit tests (no GPU needed; one test also needs the ERA5 files and is skipped without them):
